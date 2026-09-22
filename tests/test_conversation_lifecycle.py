@@ -62,3 +62,14 @@ class ConversationLifecycleContractTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class FrontendUntrustedContentTests(unittest.TestCase):
+    def test_answers_are_escaped_before_limited_markdown_rendering(self):
+        self.assertIn("const escapeHtml =", FRONT)
+        self.assertIn("let formattedText = escapeHtml(input)", FRONT)
+
+    def test_attachment_names_are_built_with_text_nodes(self):
+        self.assertIn("existingAttachmentsElement.replaceChildren()", FRONT)
+        self.assertIn("document.createTextNode(name)", FRONT)
+        self.assertIn("removeButton.dataset.filename = name", FRONT)
+        self.assertNotIn("${name}\\n                <button", FRONT)
