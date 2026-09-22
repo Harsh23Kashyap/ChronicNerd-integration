@@ -320,9 +320,16 @@ const getAnalysisText = (fullText) => {
  * @param {string} disclaimer - The disclaimer to be appended to the formatted text.
  * @return {string} The formatted text.
  */
+const escapeHtml = (input) => String(input ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+
 const formatText = (input,disclaimer) => {
-    // Replace \n with <br>
-    let formattedText = input.replace(/\n/g, '<br>');
+    // Escape untrusted answer/cache text before adding the small supported markup set.
+    let formattedText = escapeHtml(input).replace(/\n/g, '<br>');
     // Replace **text** with <strong>text</strong>
     formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     // Replace ###
@@ -481,12 +488,20 @@ async function refreshExistingAttachments() {
         const data = await response.json();
         const documentNames = data.documents || [];
         attachmentExists = documentNames.length > 0;
-        existingAttachmentsElement.innerHTML = documentNames.map(name => `
-            <span class="existing-attachment-item">
-                ${name}
-                <button type="button" class="existing-attachment-remove" data-filename="${name}">&#x2715;</button>
-            </span>
-        `).join('');
+        existingAttachmentsElement.replaceChildren();
+        documentNames.forEach((name) => {
+            const item = document.createElement('span');
+            item.className = 'existing-attachment-item';
+            item.appendChild(document.createTextNode(name));
+
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.className = 'existing-attachment-remove';
+            removeButton.dataset.filename = name;
+            removeButton.textContent = '\u2715';
+            item.appendChild(removeButton);
+            existingAttachmentsElement.appendChild(item);
+        });
         label.textContent = attachmentExists ? '' : 'No file attached';
     } catch (err) {
         console.log('Failed to fetch existing attachments:', err);
