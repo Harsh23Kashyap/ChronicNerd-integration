@@ -123,11 +123,23 @@
         <form id="profile-form" method="dialog" novalidate>
             <h2>Diet profile</h2>
             <p class="profile-note">Optional. Saved to your account and used to personalize answers. It is not medical advice, and you can clear it at any time.</p>
-            <label for="profile-age">Age range</label>
-            <select id="profile-age">
-                <option value="">Prefer not to say</option>
-                <option>18-24</option><option>25-34</option><option>35-44</option><option>45-54</option><option>55-64</option><option>65+</option>
-            </select>
+            <label for="profile-age-trigger">Age range</label>
+            <div class="profile-age-picker">
+                <select id="profile-age" hidden tabindex="-1" aria-hidden="true">
+                    <option value="">Prefer not to say</option>
+                    <option>18-24</option><option>25-34</option><option>35-44</option><option>45-54</option><option>55-64</option><option>65+</option>
+                </select>
+                <button type="button" id="profile-age-trigger" class="profile-age-trigger" role="combobox" aria-label="Age range" aria-haspopup="listbox" aria-controls="profile-age-options" aria-expanded="false" aria-activedescendant="profile-age-option-0">Prefer not to say</button>
+                <div id="profile-age-options" class="profile-age-options" role="listbox" aria-label="Age range" hidden>
+                    <div id="profile-age-option-0" role="option" aria-selected="true" data-value="" tabindex="-1">Prefer not to say</div>
+                    <div id="profile-age-option-1" role="option" aria-selected="false" data-value="18-24" tabindex="-1">18-24</div>
+                    <div id="profile-age-option-2" role="option" aria-selected="false" data-value="25-34" tabindex="-1">25-34</div>
+                    <div id="profile-age-option-3" role="option" aria-selected="false" data-value="35-44" tabindex="-1">35-44</div>
+                    <div id="profile-age-option-4" role="option" aria-selected="false" data-value="45-54" tabindex="-1">45-54</div>
+                    <div id="profile-age-option-5" role="option" aria-selected="false" data-value="55-64" tabindex="-1">55-64</div>
+                    <div id="profile-age-option-6" role="option" aria-selected="false" data-value="65+" tabindex="-1">65+</div>
+                </div>
+            </div>
             <label for="profile-goals">Goals</label>
             <input type="text" id="profile-goals" maxlength="300" placeholder="e.g. lose weight, build muscle, more energy">
             <label for="profile-conditions">Conditions</label>

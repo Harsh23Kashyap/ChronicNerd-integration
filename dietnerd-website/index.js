@@ -1543,6 +1543,55 @@ let paperContext = null;
     const dialog = document.getElementById('profile-dialog');
     const form = document.getElementById('profile-form');
     const age = document.getElementById('profile-age');
+    const ageTrigger = document.getElementById('profile-age-trigger');
+    const ageOptions = document.getElementById('profile-age-options');
+    const ageItems = [...ageOptions.querySelectorAll('[role="option"]')];
+    let activeAge = 0;
+    function setAge(value) {
+        age.value = value;
+        const selected = Math.max(0, ageItems.findIndex(item => item.dataset.value === age.value));
+        activeAge = selected;
+        ageTrigger.textContent = ageItems[selected].textContent;
+        ageItems.forEach((item, i) => item.setAttribute('aria-selected', String(i === selected)));
+        ageTrigger.setAttribute('aria-activedescendant', ageItems[selected].id);
+    }
+    function focusAge(index) {
+        activeAge = (index + ageItems.length) % ageItems.length;
+        ageTrigger.setAttribute('aria-activedescendant', ageItems[activeAge].id);
+        ageItems.forEach((item, i) => item.classList.toggle('active-option', i === activeAge));
+        ageItems[activeAge].scrollIntoView({block: 'nearest'});
+    }
+    function closeAge() {
+        ageOptions.hidden = true;
+        ageTrigger.setAttribute('aria-expanded', 'false');
+    }
+    function openAge() {
+        ageOptions.hidden = false;
+        ageTrigger.setAttribute('aria-expanded', 'true');
+        focusAge(Math.max(0, ageItems.findIndex(item => item.dataset.value === age.value)));
+    }
+    ageTrigger.addEventListener('click', () => ageOptions.hidden ? openAge() : closeAge());
+    ageTrigger.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && !ageOptions.hidden) { event.preventDefault(); event.stopPropagation(); closeAge(); return; }
+        if (event.key === 'Tab') { closeAge(); return; }
+        if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+            event.preventDefault();
+            if (ageOptions.hidden) openAge();
+            else focusAge(event.key === 'Home' ? 0 : event.key === 'End' ? ageItems.length - 1 : activeAge + (event.key === 'ArrowDown' ? 1 : -1));
+        } else if (event.key === 'Enter' || event.key === ' ') {
+            if (!ageOptions.hidden) { event.preventDefault(); setAge(ageItems[activeAge].dataset.value); closeAge(); }
+        } else if (event.key.length === 1 && /[0-9p]/i.test(event.key)) {
+            const match = ageItems.findIndex(item => item.textContent.toLowerCase().startsWith(event.key.toLowerCase()));
+            if (match >= 0) { event.preventDefault(); if (ageOptions.hidden) openAge(); focusAge(match); }
+        }
+    });
+    ageOptions.addEventListener('click', event => {
+        const item = event.target.closest('[role="option"]');
+        if (!item) return;
+        setAge(item.dataset.value); closeAge(); ageTrigger.focus();
+    });
+    dialog.addEventListener('click', event => { if (!event.target.closest('.profile-age-picker')) closeAge(); });
+    dialog.addEventListener('close', closeAge);
     const goals = document.getElementById('profile-goals');
     const conditions = document.getElementById('profile-conditions');
     const error = document.getElementById('profile-error');
@@ -1553,7 +1602,7 @@ let paperContext = null;
             const response = await apiFetch('/profile');
             if (!response.ok) throw new Error(await DietNerdAPI.readError(response, 'Could not load the profile.'));
             const profile = await response.json();
-            age.value = profile.age_range || '';
+            setAge(profile.age_range || '');
             goals.value = profile.goals || '';
             conditions.value = profile.conditions || '';
         } catch (err) { error.textContent = err.message; }
@@ -1571,12 +1620,13 @@ let paperContext = null;
         document.getElementById('account-dropdown').hidden = true;
         document.getElementById('account-button').setAttribute('aria-expanded', 'false');
         dialog.showModal();
+        closeAge();
         loadProfile();
     });
     document.getElementById('profile-cancel').addEventListener('click', () => dialog.close());
     document.getElementById('profile-clear').addEventListener('click', async () => {
         if (await saveProfile({age_range: '', goals: '', conditions: ''}, 'Profile cleared.')) {
-            age.value = ''; goals.value = ''; conditions.value = '';
+            setAge(''); goals.value = ''; conditions.value = '';
         }
     });
     form.addEventListener('submit', async (event) => {

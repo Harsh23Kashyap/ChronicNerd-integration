@@ -425,3 +425,35 @@ html[data-theme=dark] .settings-dialog input::placeholder{color:#acbeb1}
 .conversation-item{position:relative;display:flex;align-items:center}.conversation-item .conversation-row{flex:1;padding-right:30px}.rename-button{position:absolute;right:4px;width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:12px;cursor:pointer;opacity:0;transition:opacity .15s ease}.conversation-item:hover .rename-button,.conversation-item:focus-within .rename-button{opacity:1}.rename-button:hover{background:#dbe8dc;color:var(--forest)}.conversation-row.active~.rename-button{color:#dcebe0}.rename-input{width:100%;min-height:38px;border:1px solid var(--forest);border-radius:8px;background:#fff;color:var(--ink);padding:8px 11px;font:500 12px "DM Sans",sans-serif}.rename-input:focus{outline:none;box-shadow:0 0 0 3px rgba(23,63,53,.12)}.rename-input.rename-error{border-color:var(--danger)}@media(hover:none){.rename-button{opacity:.6}}@media(prefers-reduced-motion:reduce){.rename-button{transition:none}}html[data-theme=dark] .rename-input{background:#1f2b24;color:#eaf3ec;border-color:#58705e}html[data-theme=dark] .rename-button:hover{background:#243028}
 
 .paper-dialog label{display:block;margin:4px 0 6px;color:var(--muted);font:600 11px "DM Sans",sans-serif}.paper-dialog input[type=file]{height:auto;padding:8px;background:transparent}.paper-dialog input[type=file]::file-selector-button{border:1px solid #c8d8cd;border-radius:7px;background:#eef4ee;color:#285b50;padding:5px 8px;cursor:pointer;margin-right:8px}html[data-theme=dark] .paper-dialog input[type=file]::file-selector-button{background:#243028;color:#c4df72;border-color:#58705e}
+
+/* A profile-only listbox keeps the menu in DietNerd's palette on every OS. */
+#profile-dialog{overflow:visible}
+.profile-age-picker{position:relative}
+.settings-dialog .profile-age-trigger{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;height:46px;padding:0 13px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font:500 15px "DM Sans",sans-serif;text-align:left;cursor:pointer}
+.profile-age-trigger::after{content:"";flex:none;width:8px;height:8px;border-right:1.8px solid currentColor;border-bottom:1.8px solid currentColor;transform:rotate(45deg) translateY(-2px);opacity:.7}
+.settings-dialog .profile-age-trigger:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+.profile-age-options[hidden]{display:none}
+.profile-age-options{position:absolute;z-index:5;top:calc(100% + 5px);left:0;right:0;max-height:min(290px,42vh);overflow:auto;padding:5px;border:1px solid #b7cbbd;border-radius:12px;background:#fffdf7;color:#173f35;box-shadow:0 15px 36px rgba(23,63,53,.2);font:500 14px "DM Sans",sans-serif;overscroll-behavior:contain}
+.profile-age-options [role=option]{min-height:38px;display:flex;align-items:center;padding:7px 12px;border-radius:8px;cursor:pointer}
+.profile-age-options [role=option][aria-selected=true]{background:#eaf0e9;color:#173f35;font-weight:700}
+.profile-age-trigger[aria-expanded=true]~.profile-age-options [role=option]:is(:hover,.active-option,[aria-selected=true]){background:#eaf0e9}
+html[data-theme=dark] .settings-dialog .profile-age-trigger{background:#1f2b24;color:#eaf3ec;border-color:#58705e}
+html[data-theme=dark] .profile-age-options{background:#243028;color:#eaf3ec;border-color:#58705e;box-shadow:0 16px 38px rgba(0,0,0,.4)}
+html[data-theme=dark] .profile-age-options [role=option]:is(:hover,.active-option,[aria-selected=true]),html[data-theme=dark] .profile-age-trigger[aria-expanded=true]~.profile-age-options [role=option]:is(:hover,.active-option,[aria-selected=true]){background:#3a5140;color:#eaf3ec}
+/* The temporary amber workspace has its own dark surfaces, not light cream. */
+html[data-theme=dark] body.temporary-mode .chat-panel{box-shadow:inset 4px 0 0 #b88a5a}
+html[data-theme=dark] body.temporary-mode .chat-header{border-bottom-color:#67513d}
+html[data-theme=dark] body.temporary-mode .chat-header .status-dot{background:#d7a46f;box-shadow:0 0 0 5px rgba(215,164,111,.2)}
+html[data-theme=dark] body.temporary-mode .chat-header .status-dot:after{border-color:#d7a46f}
+html[data-theme=dark] body.temporary-mode .chat-header .header-actions>span{color:#e9cba5}
+html[data-theme=dark] body.temporary-mode .welcome-message{color:#e9dccb}
+html[data-theme=dark] body.temporary-mode .welcome-message .assistant-avatar{background:#d8b88e}
+html[data-theme=dark] body.temporary-mode .composer-wrap{border-top-color:#67513d}
+html[data-theme=dark] body.temporary-mode .chat-message.user .message-content{background:#805737;color:#fff7ed}
+html[data-theme=dark] body.temporary-mode .chat-message.assistant .message-content{background:#443629;color:#f6eadb}
+html[data-theme=dark] body.temporary-mode .paper-button,html[data-theme=dark] body.temporary-mode .paper-chip-row{background:#443629;border-color:#8c694a;color:#f7d8ae}
+html[data-theme=dark] body.temporary-mode .paper-button:hover{background:#57432e}
+html[data-theme=dark] body.temporary-mode #paper-clear{color:#f7d8ae}
+html[data-theme=dark] body.temporary-mode .composer #question::placeholder{color:#d4c1a8}
+html[data-theme=dark] body.temporary-mode .chat-header #chat-title{color:#f0c899}
+html[data-theme=dark] body.temporary-mode .temporary-chat-button[aria-pressed=true]{background:#805737;color:#fff7ed;border-color:#9c734e}
