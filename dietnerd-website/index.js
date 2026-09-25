@@ -103,6 +103,7 @@ function openSourcesPanel(references) {
 
 function appendChatMessage(role, text, references = '') {
     const thread = document.getElementById('chat-thread');
+    thread.querySelector('.welcome-message')?.remove();
     const article = document.createElement('article');
     article.className = `chat-message ${role}`;
     const avatar = document.createElement('span');
@@ -773,6 +774,7 @@ function conversationHasTurns() {
 }
 
 let questionInFlight = false;
+let selectedSuggestion = false;
 function setComposerBusy(busy) {
     questionInFlight = busy;
     document.getElementById('submit').disabled = busy;
@@ -856,13 +858,25 @@ function offerSimilarQuestions(question, similar) {
     const hintElement = document.querySelector('.hint');
     container.replaceChildren();
     hintElement.textContent = 'A new answer takes about a minute. For an instant answer, pick a similar question that has already been answered.';
-    similar.forEach((item) => {
+    const seen = new Set([question.trim().toLocaleLowerCase().replace(/\s+/g, ' ')]);
+    const unique = (Array.isArray(similar) ? similar : []).filter((item) => {
+        const text = String(item?.[1] || '').trim();
+        const key = text.toLocaleLowerCase().replace(/\s+/g, ' ');
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    }).slice(0, 4);
+    unique.forEach((item) => {
         const button = document.createElement('button');
         button.type = 'button';
         button.textContent = item[1];
         button.addEventListener('click', () => {
             container.style.display = 'none';
             hintElement.textContent = '';
+            // Replace the provisional question; don't leave two user bubbles.
+            const last = Array.from(document.querySelectorAll('#chat-thread .chat-message.user')).at(-1);
+            if (last) last.remove();
+            selectedSuggestion = true;
             document.getElementById('question').value = item[1];
             document.getElementById('submit').click();
         });
@@ -871,7 +885,7 @@ function offerSimilarQuestions(question, similar) {
     const original = document.createElement('button');
     original.type = 'button';
     original.className = 'generate-original';
-    original.textContent = similar.length
+    original.textContent = unique.length
         ? 'Answer my original question (about a minute)'
         : 'No similar questions found. Answer my question (about a minute)';
     original.addEventListener('click', () => {
@@ -897,6 +911,8 @@ document.getElementById('submit').addEventListener('click', async () => {
     document.getElementById('example-questions')?.classList.add('hidden');
     similarQuestionsContainer.style.display = 'none';
     hintElement.textContent = '';
+    const useSelectedSuggestion = selectedSuggestion;
+    selectedSuggestion = false;
     appendChatMessage('user', question);
     input.value = '';
 
@@ -906,30 +922,39 @@ document.getElementById('submit').addEventListener('click', async () => {
     }
 
     setComposerBusy(true);
+    const initialStatus = appendPendingMessage();
+    initialStatus.setStatus('Checking for a saved answer...');
     let cachedAnswer = null;
     try {
         cachedAnswer = await getAnswer(question);
     } catch (err) {
         cachedAnswer = null;
     } finally {
-        setComposerBusy(false);
+        initialStatus.remove();
     }
     if (cachedAnswer) {
+        setComposerBusy(false);
         showAssistantAnswer(cachedAnswer, [], question);
         return;
     }
 
     // Follow-ups inside a conversation go straight to generation so the
     // earlier turns are used to understand the question.
-    if (conversationHasTurns()) {
+    if (useSelectedSuggestion || conversationHasTurns()) {
+        setComposerBusy(false);
         await generateAnswer(question);
         return;
     }
     let similar = [];
+    const searchStatus = appendPendingMessage();
+    searchStatus.setStatus('Finding related questions...');
     try {
         similar = await get_sim(question);
     } catch (err) {
         similar = [];
+    } finally {
+        searchStatus.remove();
+        setComposerBusy(false);
     }
     offerSimilarQuestions(question, similar || []);
 });
