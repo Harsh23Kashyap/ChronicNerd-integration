@@ -1,6 +1,7 @@
 from helper_functions import *
 from conversation_store import append_turn
 import auth
+import byok
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Query, UploadFile, File, Form, Depends, Request, Response
 from fastapi.responses import StreamingResponse
@@ -348,6 +349,8 @@ async def logout(request: Request, response: Response):
             connection.commit()
         finally:
             connection.close()
+    if token:
+        byok.remove(auth.token_digest(token))
     _clear_session_cookie(response)
     return {"status": "ok"}
 
@@ -412,6 +415,7 @@ async def reset_password(body: ResetPasswordModel):
         connection.commit()
     finally:
         connection.close()
+    byok.remove_user(email)
     logging.info("[AUTH] Password reset completed")
     return {"message": "Your password has been reset. Please sign in with the new password."}
 
@@ -431,7 +435,9 @@ async def change_password(body: ChangePasswordModel, request: Request, email: st
     if problem:
         raise HTTPException(status_code=400, detail=problem)
     _set_password(email, body.new_password)
-    _revoke_sessions(email, keep_token=_session_token(request))
+    keep_token = _session_token(request)
+    _revoke_sessions(email, keep_token=keep_token)
+    byok.remove_user(email, keep_hash=auth.token_digest(keep_token) if keep_token else None)
     return {"message": "Password updated. Other devices have been signed out."}
 
 disclaimer = """
@@ -683,9 +689,54 @@ async def remove_attachment(filename: str = Query(...), email: str = Depends(cur
         connection.close()
     return JSONResponse({"status": "ok"})
 
+def _require_safe_key_origin(request: Request):
+    origin = request.headers.get("origin")
+    if not origin or origin.rstrip("/") not in origins:
+        raise HTTPException(status_code=403, detail="This origin cannot manage research keys.")
+    # Browser Origin is necessary but not sufficient: do not send secrets across
+    # the network without TLS. The local browser test runs on loopback HTTP.
+    from urllib.parse import urlparse
+    parsed = urlparse(origin)
+    if parsed.scheme != "https" and parsed.hostname not in ("localhost", "127.0.0.1"):
+        raise HTTPException(status_code=403, detail="A secure connection is required.")
+    if request.url.scheme != "https" and request.client and request.client.host not in ("127.0.0.1", "::1"):
+        raise HTTPException(status_code=403, detail="A secure connection is required.")
+
+@app.post("/openai_key")
+async def set_openai_key(request: Request, email: str = Depends(current_user)):
+    _require_safe_key_origin(request)
+    if request.headers.get("content-type", "").split(";", 1)[0].strip() != "application/json":
+        raise HTTPException(status_code=415, detail="JSON required.")
+    raw = await request.body()
+    if len(raw) > 1024:
+        raise HTTPException(status_code=413, detail="Research key request is too large.")
+    try:
+        data = json.loads(raw)
+        secret = data.get("api_key") if isinstance(data, dict) else None
+        expires_in = byok.put(auth.token_digest(_session_token(request)), email, secret)
+    except (ValueError, TypeError, UnicodeDecodeError, AttributeError):
+        raise HTTPException(status_code=400, detail="Invalid API key format.") from None
+    return JSONResponse({"status": "ready", "expires_in_seconds": expires_in}, headers={"Cache-Control": "no-store"})
+
+@app.get("/openai_key")
+async def openai_key_status(request: Request, email: str = Depends(current_user)):
+    token = _session_token(request)
+    ready = bool(byok.get(auth.token_digest(token), email))
+    return JSONResponse({"ready": ready}, headers={"Cache-Control": "no-store"})
+
+@app.delete("/openai_key")
+async def clear_openai_key(request: Request, email: str = Depends(current_user)):
+    _require_safe_key_origin(request)
+    byok.remove(auth.token_digest(_session_token(request)), email)
+    return JSONResponse({"status": "removed"}, headers={"Cache-Control": "no-store"})
+
 @app.post("/process_query")
-async def process_query(background_tasks: BackgroundTasks, query: QueryModel, email: str = Depends(current_user)):
+async def process_query(background_tasks: BackgroundTasks, query: QueryModel, request: Request, email: str = Depends(current_user)):
     query.email = email
+    token = _session_token(request)
+    key = byok.get(auth.token_digest(token), email)
+    if not key and not os.getenv("OPENAI_API_KEY"):
+        raise HTTPException(status_code=409, detail="Add an API key for this session before asking a research question.")
     request_id = str(uuid.uuid4())
     conversation_id = query.conversation_id
     if conversation_id and not conversation_belongs_to(query.email, conversation_id):
@@ -694,7 +745,7 @@ async def process_query(background_tasks: BackgroundTasks, query: QueryModel, em
         conversation_id = create_conversation(query.email, query.user_query[:120])
     update_queues[request_id]
     request_owners[request_id] = email
-    background_tasks.add_task(process_user_query, query.user_query, request_id, query.email, conversation_id)
+    background_tasks.add_task(_run_research_with_key, query.user_query, request_id, query.email, conversation_id, auth.token_digest(token) if key else None)
     return JSONResponse({"request_id": request_id, "conversation_id": conversation_id})
 
 @app.get("/sse")
@@ -736,6 +787,18 @@ def get_user_documents(email: str):
         return {row[0]: row[1] for row in cursor.fetchall()}
     finally:
         connection.close()
+
+def _run_research_with_key(user_query, request_id, email, conversation_id, token_hash):
+    scope = byok.activate(token_hash, email) if token_hash else None
+    try:
+        return process_user_query(user_query, request_id, email, conversation_id)
+    except Exception:
+        # Do not echo provider exceptions: SDK errors may reflect request headers.
+        logging.error("Research request failed (details suppressed)")
+        loop.run_until_complete(send_update(request_id, {"end_output": "Research could not finish. Please try again.", "relevant_articles": [], "citations_obj": {}, "citations": []}))
+    finally:
+        if scope is not None:
+            byok.reset(scope)
 
 def process_user_query(user_query, request_id, email, conversation_id):
     session_memory = get_session_memory(email, conversation_id)

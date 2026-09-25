@@ -36,7 +36,8 @@ from bs4 import BeautifulSoup
 
 
 # Summarizer
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import as_completed
+from byok import ContextThreadPoolExecutor as ThreadPoolExecutor, ScopedOpenAI
 import string
 from tenacity import retry # Exponential Backoff
 # wait_random_exponential stop_after_attempt
@@ -56,7 +57,7 @@ import textwrap
 # If No Similar Questions:
 """
 
-client = OpenAI()
+client = ScopedOpenAI()
 
 """# Step1. Evaluate Question Validity
 We do not answer questions related to meal-planning or recipe creation.
@@ -253,7 +254,7 @@ def exponential_backoff(func, *args, **kwargs):
                 if result:
                     return result
             except Exception as e:
-                print(f"Attempt {i+1} failed: {str(e)}")
+                print(f"Attempt {i+1} failed (details suppressed)")
                 time.sleep(wait)
                 wait *= 2 ** i + (random.uniform(0, 1) * 0.1) 
         return None
@@ -399,7 +400,7 @@ def concurrent_relevance_classification(articles, user_query):
                 else:
                     irrelevant_articles.append(result[2])
             except Exception as e:
-                print("Error processing article:", e)
+                print("Error processing article (details suppressed)")
 
   return relevant_articles, irrelevant_articles
 """## Step4. Research Processing
@@ -1358,7 +1359,7 @@ def process_article_with_retry(article):
   try:
       return process_article(article)
   except Exception as e:
-      print("Error processing article:", e, "- waiting 10 secs")
+      print("Error processing article (details suppressed) - waiting 10 secs")
       time.sleep(10)
       print("Trying again")
       return process_article(article)
@@ -1385,7 +1386,7 @@ def concurrent_article_processing(articles_to_process):
               print(result)
               print('-----------------------------------------------------------')
           except Exception as e:
-              print("Error processing article:", e)
+              print("Error processing article (details suppressed)")
   return relevant_article_summaries
 
 """#### Write Articles to DB"""

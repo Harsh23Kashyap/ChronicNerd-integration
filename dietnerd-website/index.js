@@ -2,6 +2,51 @@
 const baseURL = DietNerdAPI.baseURL;
 const apiFetch = DietNerdAPI.apiFetch;
 
+function setResearchKeyStatus(message) {
+    document.getElementById('openai-key-status').textContent = message;
+}
+
+function installResearchKeyControls() {
+    const dialog = document.getElementById('openai-key-dialog');
+    const form = document.getElementById('openai-key-form');
+    const input = document.getElementById('openai-key-input');
+    document.getElementById('openai-key-button').addEventListener('click', async () => {
+        input.value = '';
+        setResearchKeyStatus('Checking session status...');
+        dialog.showModal();
+        try {
+            const response = await apiFetch('/openai_key');
+            setResearchKeyStatus(response.ok && (await response.json()).ready
+                ? 'A key is ready for this session. It will expire within 30 minutes.'
+                : 'No key is set for this session.');
+        } catch { setResearchKeyStatus('Could not check key status.'); }
+    });
+    document.getElementById('openai-key-close').addEventListener('click', () => { input.value = ''; dialog.close(); });
+    dialog.addEventListener('close', () => { input.value = ''; });
+    document.getElementById('openai-key-remove').addEventListener('click', async () => {
+        try {
+            const response = await apiFetch('/openai_key', {method: 'DELETE'});
+            setResearchKeyStatus(response.ok ? 'Key removed from this session.' : 'Could not remove the key.');
+        } catch { setResearchKeyStatus('Could not remove the key.'); }
+        input.value = '';
+    });
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const requestBody = JSON.stringify({api_key: input.value});
+        input.value = '';
+        setResearchKeyStatus('Saving for this session...');
+        try {
+            const response = await apiFetch('/openai_key', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: requestBody,
+            });
+            setResearchKeyStatus(response.ok ? 'Key ready. It expires within 30 minutes.' : 'Could not use this key. Check its format.');
+        } catch { setResearchKeyStatus('Could not reach the server.'); }
+    });
+}
+installResearchKeyControls();
+
+
 
 function getConversationId() {
     return sessionStorage.getItem('dietnerd_conversation_id') || null;
