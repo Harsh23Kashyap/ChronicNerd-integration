@@ -25,6 +25,7 @@ import os
 import mysql.connector
 
 import logging
+import subprocess
 
 #Sim search
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -289,6 +290,32 @@ async def health():
     except Exception:
         return JSONResponse({"status": "degraded", "database": "unreachable"}, status_code=503)
     return {"status": "ok", "database": "ok"}
+
+def _openai_network_probe():
+    """Check TLS reachability only, without sending any API key or logging a URL token."""
+    try:
+        result = subprocess.run(
+            ["curl", "--silent", "--show-error", "--output", "/dev/null",
+             "--write-out", "%{http_code}", "--connect-timeout", "3", "--max-time", "7",
+             "https://api.openai.com/v1/models"],
+            capture_output=True, text=True, timeout=9, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return {"status": "unreachable", "http_status": None}
+    # An unauthenticated 401 proves DNS, TLS, and HTTP reached OpenAI. No key leaves the server.
+    code = result.stdout.strip()
+    if result.returncode == 0 and code == "401":
+        return {"status": "reachable", "http_status": 401}
+    return {"status": "unreachable", "http_status": int(code) if code.isdigit() and code != "000" else None}
+
+
+@app.get("/health/openai-network")
+async def openai_network_health():
+    # An opt-in diagnostic: keep the ordinary /health fast for load balancers.
+    result = await asyncio.to_thread(_openai_network_probe)
+    return JSONResponse(result, status_code=200 if result["status"] == "reachable" else 503,
+                        headers={"Cache-Control": "no-store"})
+
 
 @app.post("/register")
 async def register(auth_body: AuthModel, response: Response):
