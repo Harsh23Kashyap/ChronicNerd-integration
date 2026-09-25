@@ -272,6 +272,9 @@ def article_retrieval(query):
   - article_data (list): A list of PubMed articles.
   """
   Entrez.email = os.getenv('ENTREZ_EMAIL')
+  # NCBI's API key raises the documented E-utilities rate allowance. Do not
+  # log it or attach it to requests to publishers, only Entrez calls.
+  Entrez.api_key = os.getenv('NCBI_API_KEY') or None
 
   search_results = exponential_backoff(Entrez.esearch, db="pubmed", term=query, retmax=10, sort="relevance")
   # search_results = esearch(db="pubmed", term=query, retmax=10, sort="relevance")
