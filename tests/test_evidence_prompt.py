@@ -19,8 +19,8 @@ class EvidencePromptTest(unittest.TestCase):
         with patch.object(h.client.chat.completions, 'create') as create:
             output = h.generate_final_response(articles, 'Compare Mediterranean and low-carbohydrate diets for a person with CKD.')
         create.assert_not_called()
-        self.assertIn('do not include a low-carbohydrate diet study', output)
-        self.assertIn('cannot support a comparison', output)
+        self.assertIn('do not directly compare', output)
+        self.assertIn('cannot establish which option is better', output)
         self.assertNotIn('References:', output)
 
     def test_when_both_diets_retrieved_model_must_acknowledge_evidence_limits(self):
@@ -36,3 +36,47 @@ class EvidencePromptTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ComparisonGateTest(unittest.TestCase):
+    def test_two_separate_arm_studies_must_not_support_a_head_to_head_claim(self):
+        sources = [
+            {'title': 'Mediterranean diet and CKD incidence'},
+            {'title': 'Low-carbohydrate diets and diabetes management'},
+        ]
+        with patch.object(h.client.chat.completions, 'create') as create:
+            answer = h.generate_final_response(sources, 'Compare Mediterranean diet and low-carbohydrate diet for CKD.')
+        create.assert_not_called()
+        self.assertIn('cannot rank or recommend', answer)
+        self.assertNotIn('References', answer)
+
+    def test_unparsed_comparison_has_no_false_pair(self):
+        self.assertIsNone(h.extract_comparison_terms('Is the Mediterranean diet healthy?'))
+        self.assertEqual(h.extract_comparison_terms('Which is better, Mediterranean or low-carb?'), ('mediterranean', 'low-carb'))
+        self.assertEqual(h.extract_comparison_terms('Compare Mediterranean and low-carbohydrate diets for CKD'),
+                         ('mediterranean', 'low-carbohydrate diets'))
+
+
+class ComparisonSourceQualityTest(unittest.TestCase):
+    def test_generated_summary_cannot_make_a_source_qualify(self):
+        source = {'title': 'Mediterranean diet and CKD',
+                  'summary': 'Compared Mediterranean and low-carbohydrate diets'}
+        self.assertFalse(h.article_directly_compares(source, 'mediterranean', 'low-carbohydrate diets'))
+
+
+class RawPubMedComparisonTest(unittest.TestCase):
+    def test_cached_summary_does_not_hide_direct_comparison_in_original(self):
+        original = [{'MedlineCitation': {'Article': {
+            'ArticleTitle': 'Mediterranean versus low-carbohydrate diets',
+            'Abstract': {'AbstractText': ['A randomized comparison of both diets.']}
+        }}}]
+        reply = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='What we know\nEvidence is limited.'))])
+        with patch.object(h.client.chat.completions, 'create', return_value=reply) as create:
+            h.generate_final_response([{'summary': 'A cached summary without original metadata'}],
+                                      'Compare Mediterranean and low-carbohydrate diets',
+                                      original_articles=original)
+        create.assert_called_once()
+
+    def test_comparison_does_not_qualify_from_generated_summary(self):
+        source = {'title': 'Mediterranean diet and CKD', 'summary': 'Compared it with low carbohydrate diets'}
+        self.assertFalse(h.article_directly_compares(source, 'mediterranean', 'low-carbohydrate diets'))

@@ -102,3 +102,9 @@ node tests/browser_xss_e2e.js
 `run_browser_e2e.sh` starts the stubbed API and the static site, then drives real Chrome through register, a cached answer, a follow-up that uses conversation memory, a new conversation, a file upload, delete, sign out, forgot password, the reset link, and signing in with the new password. Screenshots are written to `/downloads/`.
 
 The browser fixture stubs only the external science APIs. A release claim still requires a separate live OpenAI/PubMed pass with valid credentials.
+
+## Planned AWS deployment for ChronicNerd
+
+The target topology is EC2 for the API, private S3 + CloudFront for the static frontend, and SES for password-reset mail. See [docs/aws-deployment.md](docs/aws-deployment.md) for the account/domain decisions, architecture, security limits and end-to-end checklist. Until the domain and AWS account are approved, this remains a local build, not a deployed service.
+
+Build the static package for a same-origin CloudFront `/api` proxy with `API_URL=/api ./scripts/build-s3-site.sh`. It writes `dist/site/`, replacing the source `env.js` localhost API URL with a public endpoint. Keep backend secrets out of that directory and out of Git. For a separate API hostname, use an HTTPS `API_URL` and configure cookies/CORS explicitly; never point a live HTTPS site at `http://`.

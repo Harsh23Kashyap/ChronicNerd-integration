@@ -1561,7 +1561,56 @@ def extract_text_from_upload(file_bytes: bytes, filename: str) -> str:
       return file_bytes.decode('latin-1', errors='replace')
 
 
-def generate_final_response(all_relevant_articles, query, attachment_text=None):
+def extract_comparison_terms(question: str):
+  """Return explicit intervention arms only when the phrasing is unambiguous."""
+  text = question.strip().rstrip('?.! ')
+  prefix = re.search(r"\bcompar(?:e|ing)\s+", text, re.IGNORECASE)
+  if prefix:
+    text = text[prefix.end():]
+    pattern = r"^(.+?)\s+(?:with|and|versus|vs\.?|against|compared\s+(?:with|to))\s+(.+?)(?=\s+(?:for|among|in)\s+|$)"
+  else:
+    # Do not let an LLM rank two isolated studies for a 'which is better' query.
+    # A deliberately narrow pattern avoids mistaking the entire question for an arm.
+    better = re.search(r"\bwhich\s+is\s+better\s*[,;:]?\s*(.+?)\s+(?:or|versus|vs\.?)\s+(.+?)(?=\s+(?:for|among|in)\s+|$)", text, re.IGNORECASE)
+    if not better:
+      return None
+    match = better
+    pattern = None
+  if pattern:
+    match = re.search(pattern, text, re.IGNORECASE)
+  if match:
+    arms = [re.sub(r"^(?:the|a|an)\s+", "", part.strip(), flags=re.IGNORECASE).lower()
+            for part in match.groups()]
+    if all(1 <= len(arm.split()) <= 6 for arm in arms) and arms[0] != arms[1]:
+      return tuple(arms)
+  return None
+
+
+def article_directly_compares(article: dict, first: str, second: str) -> bool:
+  """Conservative candidate gate, not certification of clinical applicability.
+
+  Only title and abstract are original source text. Generated summaries can
+  introduce an arm and must not qualify a paper as a direct comparison.
+  """
+  medline = article.get('MedlineCitation', {}).get('Article', {})
+  title = article.get('title') or medline.get('ArticleTitle')
+  abstract = article.get('abstract')
+  if abstract is None:
+    abstract = medline.get('Abstract', {}).get('AbstractText')
+  if isinstance(abstract, list):
+    abstract = ' '.join(str(part) for part in abstract)
+  canonical = lambda value: re.sub(r"[-‐‑–]", " ", str(value or '').lower())
+  text = canonical(title) + ' ' + canonical(abstract)
+  if not text.strip():
+    return False
+  def mentions(arm):
+    words = canonical(arm).split()
+    return all(re.search(r"\b" + re.escape(word.rstrip('s')) + r"s?\b", text) for word in words)
+  return (mentions(first) and mentions(second) and
+          bool(re.search(r"\b(?:versus|vs\.?|compar(?:e|ed|ison|ative|ing)|head.to.head|randomi[sz]ed)\b", text)))
+
+
+def generate_final_response(all_relevant_articles, query, attachment_text=None, original_articles=None):
   """
   Generate the final response to the user question based on the strongest level of evidence in the provided article summaries.
 
@@ -1569,26 +1618,26 @@ def generate_final_response(all_relevant_articles, query, attachment_text=None):
   - all_relevant_articles (list): List of all relevant article summaries.
   - query (str): User question.
   - attachment_text (str, optional): Text extracted from a user-uploaded file providing personal context.
+  - original_articles (list, optional): Original PubMed metadata for comparison gate.
+    Cached summaries omit titles and abstracts, so cannot qualify a direct comparison.
 
   Returns:
   - final_output (str): Final response to the user question.
   """
 
-  # Do not ask the model to infer a diet comparison when none of the
-  # retrieved studies even names the comparator. This is a conservative
-  # abstention, not a claim that no such study exists in the literature.
-  lower_query = query.lower()
-  is_diet_comparison = ("mediterranean" in lower_query and
-                        ("low-carbohydrate" in lower_query or "low carbohydrate" in lower_query or "low-carb" in lower_query))
-  if is_diet_comparison:
-    titles = " ".join(str(article.get("title", "")) for article in all_relevant_articles).lower()
-    has_low_carb_candidate = any(term in titles for term in ("low-carbohydrate", "low carbohydrate", "low-carb"))
-    if not has_low_carb_candidate:
-      return ("The articles retrieved for this question do not include a low-carbohydrate diet study, "
-              "so they cannot support a comparison with a Mediterranean diet for the requested "
-              "population. I cannot recommend one over the other from this evidence. Please "
-              "review this choice with a registered dietitian, especially with chronic kidney "
-              "disease and a low B12 level.\n" + disclaimer)
+  # A parsed comparison needs one source addressing both interventions. Separate
+  # single-arm papers cannot establish which is better for the same population.
+  # This is a conservative retrieval gate, not a systematic-review finding.
+  comparison = extract_comparison_terms(query)
+  candidates = original_articles if original_articles is not None else all_relevant_articles
+  if comparison and not any(article_directly_compares(article, *comparison) for article in candidates):
+    return ("What we know\nThe retrieved sources do not directly compare "
+            f"{comparison[0]} with {comparison[1]} for this question.\n\n"
+            "What we don't know\nThese sources cannot establish which option is better "
+            "for the requested person or population. I cannot rank or recommend one "
+            "over the other from this evidence.\n\n"
+            "What to ask a dietitian\nWhich direct comparative studies and personal "
+            "risks should guide this choice?\n" + disclaimer)
 
   system_prompt_response =  """
       You evaluate research articles and summarize only what the supplied Evidence and Claims supports. Cite the smallest set of relevant human studies needed for each claim; there is no minimum citation count. Do not cite a study merely because it appears in the supplied set. Do not use general background papers to support a more specific clinical recommendation.
@@ -1597,7 +1646,7 @@ def generate_final_response(all_relevant_articles, query, attachment_text=None):
       If the user question is dangeorus, harmful, or malicious, absolutely do not offer advice or strategies and absolutely do not address the pros, benefits, or potential results/outcomes. You must only focus on deterring this behavior, addressing the risks, and offering safe alternatives. The answer should also try to include as many different demographics as possible. Absolutely NO animal studies should be referenced or included in the final response. Mention dosage amounts when the information is available. Medical terms and technical concepts must be explained to a layman audience. Be sure to emphasize that you should always go and see a registered dietitian or a registered dietitian nutritionist.
       If you cite an article, use its exact citation from Evidence and Claims in a reference list and cite it in-line by its supplied bracket number. Cite only articles directly supporting the adjacent claim; do not cite tangential articles just to fill a reference list. If no supplied article directly supports an answer, say that and omit the reference list. Do not list duplicate references. Use clear section titles and short bullets when they aid readability.
 
-      Output a direct answer that separates supported findings from gaps in the supplied evidence. Include a References section only for studies actually cited. If the evidence cannot answer the question, give a concise reason and useful next question, with no invented citations.
+      Use exactly these three visible headings: What we know; What we don't know; What to ask a dietitian. For each finding, cite the adjacent directly relevant source and make the study population and outcome clear. Under What we don't know, explicitly name indirect, missing, conflicting, or non-comparable evidence. The final heading is one or two practical questions, not medical instructions. Include a References section only for studies actually cited. If the evidence cannot answer the question, say so briefly under What we don't know; never invent citations or a source quote.
       """
 
   personal_context_section = (

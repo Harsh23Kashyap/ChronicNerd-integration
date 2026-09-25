@@ -11,3 +11,5 @@ ATT81274.env
 node_modules/
 tests/browser-upload.txt
 .env
+# Generated S3 site package
+dist/

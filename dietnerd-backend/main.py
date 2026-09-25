@@ -198,8 +198,9 @@ def _get_db_connection():
     )
 
 def _client_key(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for", "")
-    return (forwarded.split(",")[0].strip() if forwarded else "") or (request.client.host if request.client else "unknown")
+    # A direct caller can forge X-Forwarded-For. Use the socket peer for auth
+    # rate limits; add an edge WAF rate limit when deployed behind an ALB.
+    return request.client.host if request.client else "unknown"
 
 def _create_session(email: str) -> str:
     token = auth.new_token()
@@ -838,7 +839,7 @@ def process_user_query(user_query, request_id, email, conversation_id):
 
     # Final Output
     start_output = time.time()
-    final_output = generate_final_response(all_relevant_articles, pipeline_query, None)
+    final_output = generate_final_response(all_relevant_articles, pipeline_query, None, original_articles=relevant_articles)
     if attachment_partial_answer:
         final_output = attachment_partial_answer + "\n\n" + final_output
     end_output = time.time()
