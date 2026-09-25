@@ -871,6 +871,21 @@ async def sse(request_id: str = Query(default=None), email: str = Depends(curren
     return EventSourceResponse(event_generator(request_id))
 
 
+def _serialize_progress_event(data):
+    """Keep terminal answer deliverable if article metadata is not JSON-safe."""
+    try:
+        return json.dumps({"update": data}, allow_nan=False)
+    except (TypeError, ValueError, OverflowError):
+        if isinstance(data, dict) and isinstance(data.get("end_output"), str):
+            logging.warning("SSE final metadata serialization failed; sending answer text only")
+            return json.dumps({"update": {
+                "end_output": data["end_output"],
+                "relevant_articles": [], "citations_obj": {}, "citations": [],
+            }})
+        logging.warning("SSE progress serialization failed; dropping unsafe metadata")
+        return json.dumps({"update": "Research is continuing..."})
+
+
 async def event_generator(request_id: str):
     cursor = 0
     while True:
@@ -882,7 +897,7 @@ async def event_generator(request_id: str):
             batch = events[max(0, cursor - base):]
             cursor = base + len(events)
         for data in batch:
-            yield {"event": "message", "data": json.dumps({"update": data})}
+            yield {"event": "message", "data": _serialize_progress_event(data)}
             if isinstance(data, dict) and "end_output" in data:
                 return
         await asyncio.sleep(0.25)

@@ -924,10 +924,12 @@ async function runGeneration(userQuery, pending) {
             if (!message.update) return;
             if (message.update.end_output) {
                 window.clearInterval(reconnectTimer);
-                localStorage.setItem('referenceObject', JSON.stringify(message.update.citations_obj || {}));
-                localStorage.setItem('citations', JSON.stringify(message.update.citations || []));
-                localStorage.setItem('allArticles', JSON.stringify(message.update.relevant_articles || []));
                 eventSource.close();
+                try {
+                    localStorage.setItem('referenceObject', JSON.stringify(message.update.citations_obj || {}));
+                    localStorage.setItem('citations', JSON.stringify(message.update.citations || []));
+                    localStorage.setItem('allArticles', JSON.stringify(message.update.relevant_articles || []));
+                } catch (error) { console.warn('Could not save reference metadata locally.'); }
                 resolve(message.update);
             } else if (message.update.article_titles && pending) {
                 pending.addArticles(message.update);
@@ -938,7 +940,7 @@ async function runGeneration(userQuery, pending) {
         eventSource.onerror = () => {
             if (!lostAt) lostAt = Date.now();
             if (pending) pending.setStatus('Connection interrupted. Reconnecting to the same research request...');
-            };
+        };
     });
 }
 

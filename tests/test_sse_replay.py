@@ -139,3 +139,24 @@ def test_title_is_thread_scoped_and_stale_generation_cannot_overwrite():
     assert 'WHERE email = %s AND conversation_id = %s AND next_query_number = %s' in sql
     assert args == ('Zinc Sleep Evidence', 'a@example.invalid', 'thread-1', 3)
     db.commit.assert_called_once()
+
+
+def test_non_json_article_metadata_does_not_lose_completed_answer():
+    rid = 'unserializable-final'
+    seed(rid)
+    async def scenario():
+        await main.send_update(rid, 'Synthesizing answer...')
+        await main.send_update(rid, {
+            'end_output': 'Completed scientific answer.',
+            'relevant_articles': [{'unserializable': object()}],
+            'citations_obj': {},
+        })
+        events = [event async for event in main.event_generator(rid)]
+        final = main.json.loads(events[-1]['data'])['update']
+        assert final['end_output'] == 'Completed scientific answer.'
+        assert final['relevant_articles'] == []
+        assert len(events) == 2
+    try:
+        asyncio.run(scenario())
+    finally:
+        clean(rid)
