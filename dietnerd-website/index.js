@@ -4,6 +4,7 @@ const apiFetch = DietNerdAPI.apiFetch;
 
 let temporaryChat = false;
 let temporaryTurns = [];
+let temporaryFile = null;
 function getConversationId() {
     return temporaryChat ? null : (sessionStorage.getItem('dietnerd_conversation_id') || null);
 }
@@ -708,8 +709,9 @@ async function refreshExistingAttachments() {
     const data = await response.json();
     const documentNames = Array.isArray(data.documents) ? data.documents : [];
     attachmentExists = documentNames.length > 0;
+    if (temporaryChat) return;
     existingAttachmentsElement.replaceChildren(...documentNames.map(name => renderAttachmentChip(name)));
-    label.textContent = temporaryChat ? 'Attachments unavailable in temporary chat' : attachmentExists ? '' : 'No file attached';
+    label.textContent = attachmentExists ? '' : 'No file attached';
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -721,7 +723,20 @@ document.addEventListener('DOMContentLoaded', function () {
     refreshConversationList();
 
     fileInput.addEventListener('change', async function () {
-        if (temporaryChat || !fileInput.files.length) return;
+        if (temporaryChat) {
+            const selected = fileInput.files[0];
+            fileInput.value = '';
+            if (!selected) return;
+            if (!/\.(pdf|txt|csv)$/i.test(selected.name) || selected.size > 5 * 1024 * 1024 || !selected.size) {
+                document.getElementById('attachment-label').textContent = 'Choose a PDF, TXT or CSV file up to 5 MB.';
+                return;
+            }
+            temporaryFile = selected;
+            existingAttachmentsElement.replaceChildren(renderAttachmentChip(selected.name));
+            document.getElementById('attachment-label').textContent = 'Temporary file, not saved to your account';
+            return;
+        }
+        if (!fileInput.files.length) return;
         const file = fileInput.files[0];
         fileInput.value = '';
         const formData = new FormData();
@@ -753,7 +768,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
     existingAttachmentsElement.addEventListener('click', async function (event) {
         const removeButton = event.target.closest('.existing-attachment-remove');
-        if (temporaryChat || !removeButton || removeButton.disabled) return;
+        if (temporaryChat && removeButton) {
+            temporaryFile = null;
+            fileInput.value = '';
+            existingAttachmentsElement.replaceChildren();
+            document.getElementById('attachment-label').textContent = 'No temporary file attached';
+            return;
+        }
+        if (!removeButton || removeButton.disabled) return;
         const filename = removeButton.dataset.filename;
         const chip = removeButton.closest('.existing-attachment-item');
         removeButton.disabled = true;
@@ -908,10 +930,19 @@ function setComposerBusy(busy) {
 
 async function runGeneration(userQuery, pending) {
     const isTemporary = temporaryChat;
-    const response = await apiFetch('/process_query', {
+    const file = isTemporary ? temporaryFile : null;
+    const payload = { user_query: userQuery, conversation_id: getConversationId(), temporary: isTemporary, temporary_history: isTemporary ? temporaryTurns.slice(-8) : [] };
+    if (file) {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+        payload.attachment_filename = file.name;
+        payload.attachment_base64 = btoa(binary);
+    }
+    const response = await apiFetch(file ? '/process_query/temporary_attachment' : '/process_query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_query: userQuery, conversation_id: getConversationId(), temporary: isTemporary, temporary_history: isTemporary ? temporaryTurns.slice(-8) : [] }),
+        body: JSON.stringify(payload),
     });
     if (!response.ok) {
         throw new Error(await DietNerdAPI.readError(response, `The question could not be sent (${response.status}).`));
@@ -1161,6 +1192,10 @@ document.getElementById('conversation-select').addEventListener('change', async 
     temporaryChat = false;
     document.body.classList.remove('temporary-mode');
     temporaryTurns = [];
+    temporaryFile = null;
+    document.getElementById('attachment-file').value = '';
+    document.getElementById('existing-attachments').replaceChildren();
+    refreshExistingAttachments().catch(() => {});
     document.getElementById('attach-button').title = 'Attach a file';
     document.getElementById('temporary-chat').setAttribute('aria-pressed', 'false');
     document.getElementById('delete-conversation').hidden = false;
@@ -1184,14 +1219,17 @@ document.getElementById('temporary-chat').addEventListener('click', () => {
     temporaryChat = true;
     document.body.classList.add('temporary-mode');
     temporaryTurns = [];
-    document.getElementById('attach-button').title = 'Attachments are unavailable in temporary chat';
+    temporaryFile = null;
+    document.getElementById('attachment-file').value = '';
+    document.getElementById('existing-attachments').replaceChildren();
+    document.getElementById('attach-button').title = 'Attach a temporary file';
     document.getElementById('temporary-chat').setAttribute('aria-pressed', 'true');
     document.getElementById('chat-title').textContent = 'Temporary chat';
     document.getElementById('chat-thread').innerHTML = emptyStateMarkup(true);
     document.getElementById('delete-conversation').hidden = true;
-    document.getElementById('attach-button').disabled = true;
-    document.getElementById('existing-attachments').hidden = true;
-    document.getElementById('attachment-label').textContent = 'Attachments unavailable in temporary chat';
+    document.getElementById('attach-button').disabled = false;
+    document.getElementById('existing-attachments').hidden = false;
+    document.getElementById('attachment-label').textContent = 'No temporary file attached';
     document.querySelector('.hint').textContent = 'Not saved to your account. This tab clears when you leave or reload.';
 });
 
@@ -1203,6 +1241,10 @@ document.getElementById('new-conversation').addEventListener('click', () => {
     temporaryChat = false;
     document.body.classList.remove('temporary-mode');
     temporaryTurns = [];
+    temporaryFile = null;
+    document.getElementById('attachment-file').value = '';
+    document.getElementById('existing-attachments').replaceChildren();
+    refreshExistingAttachments().catch(() => {});
     document.getElementById('attach-button').title = 'Attach a file';
     document.getElementById('temporary-chat').setAttribute('aria-pressed', 'false');
     document.getElementById('chat-title').textContent = 'DietNerd assistant';
@@ -1297,3 +1339,38 @@ composerInput.addEventListener('input', () => { composerInput.style.height = 'au
 document.getElementById('close-sources').addEventListener('click', closeSourcesPanel);
 document.addEventListener('keydown', event => { if (event.key === 'Escape') closeSourcesPanel(); });
 if (getConversationId()) enterConversationMode();
+
+// Desktop sidebar width is a local display preference, never conversation data.
+(() => {
+    const shell = document.querySelector('.chat-shell');
+    const grip = document.getElementById('sidebar-resizer');
+    const saved = Number(localStorage.getItem('dietnerd_sidebar_width'));
+    const clamp = value => Math.max(220, Math.min(480, Math.round(value)));
+    const apply = value => { const width = clamp(value); shell.style.setProperty('--sidebar-width', `${width}px`); grip.setAttribute('aria-valuenow', width); return width; };
+    if (Number.isFinite(saved) && saved >= 220 && saved <= 480) apply(saved);
+    let dragging = false;
+    grip.addEventListener('pointerdown', e => {
+        if (e.button !== 0 || matchMedia('(max-width: 800px)').matches) return;
+        dragging = true;
+        grip.setPointerCapture(e.pointerId);
+        shell.classList.add('is-resizing');
+        document.body.classList.add('sidebar-dragging');
+        e.preventDefault();
+    });
+    grip.addEventListener('pointermove', e => { if (dragging) apply(e.clientX - shell.getBoundingClientRect().left); });
+    const finish = () => {
+        if (!dragging) return;
+        dragging = false;
+        shell.classList.remove('is-resizing');
+        document.body.classList.remove('sidebar-dragging');
+        localStorage.setItem('dietnerd_sidebar_width', grip.getAttribute('aria-valuenow'));
+    };
+    grip.addEventListener('pointerup', finish);
+    grip.addEventListener('pointercancel', finish);
+    grip.addEventListener('keydown', e => {
+        if (!['ArrowLeft','ArrowRight','Home','End'].includes(e.key)) return;
+        e.preventDefault();
+        const next = e.key === 'Home' ? 220 : e.key === 'End' ? 480 : Number(grip.getAttribute('aria-valuenow')) + (e.key === 'ArrowLeft' ? -20 : 20);
+        localStorage.setItem('dietnerd_sidebar_width', apply(next));
+    });
+})();

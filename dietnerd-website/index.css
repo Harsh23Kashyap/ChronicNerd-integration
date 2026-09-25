@@ -346,3 +346,15 @@ body.temporary-mode .starter-questions .example-question:hover,body.temporary-mo
 @media(prefers-reduced-motion:reduce){.starter-questions .example-question{transition:none!important;transform:none!important}}
 .welcome-message:has(.starter-questions){display:grid;grid-template-columns:34px minmax(0,1fr);align-content:center;align-items:start}
 .welcome-message:has(.starter-questions)>.assistant-avatar{margin-top:4px}
+
+@media(min-width:801px){
+  .chat-shell,body.conversation-mode .chat-shell{grid-template-columns:var(--sidebar-width,250px) minmax(0,1fr)}
+  .chat-shell.sources-open,body.conversation-mode .chat-shell.sources-open{grid-template-columns:var(--sidebar-width,250px) minmax(0,1fr) 350px}
+  .chat-shell>.chat-panel{grid-column:2;grid-row:1}
+  .sidebar-resizer{position:absolute;z-index:4;left:calc(var(--sidebar-width,250px) - 6px);top:0;bottom:0;width:12px;cursor:col-resize;touch-action:none;outline:0}
+  .sidebar-resizer:after{content:"";position:absolute;top:0;bottom:0;left:5px;width:2px;background:transparent;transition:background .15s}
+  .sidebar-resizer:hover:after,.sidebar-resizer:focus-visible:after,.chat-shell.is-resizing .sidebar-resizer:after{background:#6b9b82}
+  body.sidebar-dragging{user-select:none;cursor:col-resize}
+}
+@media(max-width:800px){.sidebar-resizer{display:none}}
+@media(prefers-reduced-motion:reduce){.sidebar-resizer:after{transition:none}}

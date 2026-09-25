@@ -20,6 +20,8 @@ from typing import List, Dict, Any, Optional
 
 import heapq
 import hashlib
+import base64
+import binascii
 import os
 import mysql.connector
 
@@ -181,6 +183,8 @@ class QueryModel(BaseModel):
     conversation_id: Optional[str] = None
     temporary: bool = False
     temporary_history: Optional[List[Dict[str, str]]] = None
+    attachment_filename: Optional[str] = None
+    attachment_base64: Optional[str] = None
 
 class AuthModel(BaseModel):
     email: str
@@ -695,8 +699,45 @@ async def remove_attachment(filename: str = Query(...), email: str = Depends(cur
         connection.close()
     return JSONResponse({"status": "ok"})
 
+@app.post("/process_query/temporary_attachment")
+async def process_temporary_attachment(background_tasks: BackgroundTasks, request: Request, email: str = Depends(current_user)):
+    body = bytearray()
+    max_body = (MAX_UPLOAD_BYTES * 4 // 3) + 24000
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > max_body:
+            raise HTTPException(status_code=413, detail="Temporary file is too large.")
+    try:
+        query = QueryModel.parse_raw(bytes(body))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid temporary request.")
+    if not query.temporary or query.conversation_id or not query.attachment_filename or not query.attachment_base64:
+        raise HTTPException(status_code=400, detail="A temporary file and question are required.")
+    filename = os.path.basename(query.attachment_filename.replace("\\", "/")).strip()
+    if not filename or len(filename) > 255 or os.path.splitext(filename)[1].lower() not in ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Only PDF, TXT and CSV files are supported.")
+    try:
+        file_bytes = base64.b64decode(query.attachment_base64, validate=True)
+    except (ValueError, binascii.Error):
+        raise HTTPException(status_code=400, detail="Invalid file data.")
+    if not file_bytes or len(file_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"Files must be {MAX_UPLOAD_BYTES // (1024 * 1024)} MB or smaller.")
+    if filename.lower().endswith('.pdf') and not file_bytes.startswith(b'%PDF-'):
+        raise HTTPException(status_code=400, detail="The PDF file is invalid.")
+    text = extract_text_from_upload(file_bytes, filename).strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="No readable text was found in this file.")
+    if len(text) > 80000:
+        raise HTTPException(status_code=413, detail="Extracted text is too long for temporary chat.")
+    return await _start_query(background_tasks, query, email, f"Document: {filename}\n{text}")
+
 @app.post("/process_query")
 async def process_query(background_tasks: BackgroundTasks, query: QueryModel, request: Request, email: str = Depends(current_user)):
+    if query.attachment_filename is not None or query.attachment_base64 is not None:
+        raise HTTPException(status_code=400, detail="Use the temporary file endpoint for attachments.")
+    return await _start_query(background_tasks, query, email)
+
+async def _start_query(background_tasks, query, email, temporary_attachment_context=None):
     query.email = email
     if not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(status_code=503, detail="Research is temporarily unavailable. Please try again later.")
@@ -751,7 +792,7 @@ async def process_query(background_tasks: BackgroundTasks, query: QueryModel, re
                 request_created_at.pop(request_id, None)
                 request_owners.pop(request_id, None)
             raise
-    background_tasks.add_task(_run_research_with_key, query.user_query, request_id, query.email, conversation_id, temporary_history)
+    background_tasks.add_task(_run_research_with_key, query.user_query, request_id, query.email, conversation_id, temporary_history, temporary_attachment_context)
     return JSONResponse({"request_id": request_id, "conversation_id": conversation_id})
 
 def _prune_request_events():
@@ -829,9 +870,9 @@ def get_user_documents(email: str):
     finally:
         connection.close()
 
-def _run_research_with_key(user_query, request_id, email, conversation_id, temporary_history=None):
+def _run_research_with_key(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None):
     try:
-        result = process_user_query(user_query, request_id, email, conversation_id, temporary_history)
+        result = process_user_query(user_query, request_id, email, conversation_id, temporary_history, temporary_attachment_context)
         if conversation_id:
             logging.info("Conversation title job queued")
             scope_context = copy_context()
@@ -928,7 +969,7 @@ def _send_article_titles(request_id: str, articles: list, stage: str):
         }))
 
 
-def process_user_query(user_query, request_id, email, conversation_id, temporary_history=None):
+def process_user_query(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None):
     session_memory = get_session_memory(email, conversation_id) if conversation_id else (temporary_history or [])
     raw_question = user_query
 
@@ -936,8 +977,8 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
         user_query = generate_standalone_question(user_query, session_memory)
         if conversation_id: logging.info("[SESSION MEMORY] Standalone question generated")
 
-    user_attachment_context = None
-    attachment_exist = False
+    user_attachment_context = temporary_attachment_context if not conversation_id else None
+    attachment_exist = bool(user_attachment_context)
     attachment_based_answer = False
 
     if conversation_id and check_attachment_exists(email):

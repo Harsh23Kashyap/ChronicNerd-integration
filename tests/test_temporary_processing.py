@@ -17,3 +17,20 @@ class ProcessingTest(unittest.TestCase):
             db.return_value=__import__('pandas').DataFrame([{'x':1}])
             main.process_user_query('question','req','test@example.com',None)
         exists.assert_not_called()
+
+class TemporaryAttachmentProcessingTest(unittest.TestCase):
+    def test_document_answer_does_not_touch_saved_documents_or_history(self):
+        with patch.object(main, 'check_attachment_exists') as check_saved, \
+             patch.object(main, 'get_user_documents') as read_saved, \
+             patch.object(main, 'try_answer_from_attachment', return_value=(True, 'The note says oats contain fiber.', None)) as answer, \
+             patch.object(main, 'append_session_memory') as memory, \
+             patch.object(main, 'write_output_to_db') as db, \
+             patch.object(main, 'send_update'):
+            result = main.process_user_query('What does it say?', 'req', 'test@example.com', None, [],
+                                             'Document: note.txt\nOats contain fiber.')
+        self.assertIn('oats contain fiber', result['end_output'])
+        answer.assert_called_once()
+        check_saved.assert_not_called()
+        read_saved.assert_not_called()
+        memory.assert_not_called()
+        db.assert_not_called()
