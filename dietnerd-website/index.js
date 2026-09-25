@@ -53,7 +53,12 @@ function openSourcesPanel(sourceCards) {
         title.textContent = source.title || 'Source title unavailable';
         const note = document.createElement('p');
         note.textContent = 'Retrieved citation. Claim support is not independently verified.';
-        card.append(label, title, note);
+        if (source.summary_excerpt) {
+            const excerpt = document.createElement('p');
+            excerpt.className = 'source-summary';
+            excerpt.textContent = source.summary_excerpt;
+            card.append(label, title, excerpt, note);
+        } else card.append(label, title, note);
         const analysis = analysisLink(source);
         if (analysis) {
             const view = document.createElement('a');
@@ -97,8 +102,12 @@ function sourceLink(citation, metadata) {
     return `https://doi.org/${encodeURI(doi)}`;
 }
 
+function prioritizePubMedSources(rows) {
+    return rows.sort((a, b) => Number(Boolean(sourcePmid(b))) - Number(Boolean(sourcePmid(a))) || a.number - b.number);
+}
+
 function sourcesForAnswer(answer, ledger = [], storedSources = null) {
-    if (Array.isArray(storedSources)) return storedSources.filter(row => row && Number.isInteger(row.number) && typeof row.title === 'string').map(row => ({number:row.number,title:row.title,url:/^https:\/\//i.test(row.url || '') ? row.url : '',pmid:row.pmid || ''}));
+    if (Array.isArray(storedSources)) return prioritizePubMedSources(storedSources.filter(row => row && Number.isInteger(row.number) && typeof row.title === 'string').map(row => ({number:row.number,title:row.title,url:/^https:\/\//i.test(row.url || '') ? row.url : '',pmid:row.pmid || '',summary_excerpt: typeof row.summary_excerpt === 'string' ? row.summary_excerpt.slice(0,360) : ''})));
     const {references} = splitReferenceSection(answer);
     const lines = references.split(/\n(?=\s*(?:\[\d+\]|\d+\.))/);
     const fromAnswer = lines.flatMap(line => {
@@ -113,7 +122,7 @@ function sourcesForAnswer(answer, ledger = [], storedSources = null) {
         const url = (/^https:\/\//i.test(ledgerUrl || '') ? ledgerUrl : '') || sourceLink(citation);
         return [{number, title, url, pmid:sourcePmid({url})}];
     });
-    return [...new Map(fromAnswer.map(source => [source.number, source])).values()].sort((a,b)=>a.number-b.number);
+    return prioritizePubMedSources([...new Map(fromAnswer.map(source => [source.number, source])).values()]);
 }
 
 function appendInChatSources(content, sources) {

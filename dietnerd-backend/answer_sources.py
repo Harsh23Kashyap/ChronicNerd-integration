@@ -23,6 +23,7 @@ def extract_answer_sources(answer, citations=None, ledger=None):
             continue
         url = ''
         matched_pmid = ''
+        summary_excerpt = ''
         # Match citation text as well as its number: metadata keys are usually
         # unnumbered, and an unrelated answer may reuse [1].
         normalize = lambda value: re.sub(r'\W+', ' ', value.casefold()).strip()
@@ -35,6 +36,11 @@ def extract_answer_sources(answer, citations=None, ledger=None):
                 url = details.get('URL') or ''
                 candidate = str(details.get('PMID') or '')
                 matched_pmid = candidate if re.fullmatch(r'\d{1,12}', candidate) else ''
+                summary = details.get('Summary')
+                if isinstance(summary, str):
+                    section = re.search(r'(?ims)^\s*(?:\*\*)?2[.)]\s*Main Conclusions(?:\*\*)?\s*:?\s*(.*?)(?=^\s*(?:\*\*)?3[.)]|\Z)', summary)
+                    if section:
+                        summary_excerpt = re.sub(r'\s+', ' ', section.group(1)).strip(' *-')[:360]
                 break
         if not url:
             for claim in ledger or []:
@@ -51,5 +57,6 @@ def extract_answer_sources(answer, citations=None, ledger=None):
         if number not in {row['number'] for row in rows}:
             pubmed = re.fullmatch(r'https://pubmed\.ncbi\.nlm\.nih\.gov/(\d{1,12})/?', str(url), re.I)
             rows.append({'number': number, 'title': title, 'url': url,
-                         'pmid': matched_pmid or (pubmed.group(1) if pubmed else '')})
-    return sorted(rows, key=lambda row: row['number'])
+                         'pmid': matched_pmid or (pubmed.group(1) if pubmed else ''),
+                         'summary_excerpt': summary_excerpt})
+    return sorted(rows, key=lambda row: (not bool(row['pmid']), row['number']))
