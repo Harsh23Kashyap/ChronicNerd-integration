@@ -21,7 +21,7 @@ class ApiIntegrationTest(unittest.TestCase):
         connection = main._get_db_connection()
         cursor = connection.cursor()
         cursor.execute("DELETE FROM users WHERE email = %s", (cls.email,))
-        cursor.execute("INSERT INTO users (email, password) VALUES (%s, %s)", (cls.email, "test-hash"))
+        cursor.execute("INSERT INTO users (email, password) VALUES (%s, %s)", (cls.email, main.auth.hash_password("integration-pass")))
         cursor.execute(
             "INSERT INTO question_answer (question, answer) VALUES (%s, %s) "
             "ON DUPLICATE KEY UPDATE answer = VALUES(answer)",
@@ -29,6 +29,9 @@ class ApiIntegrationTest(unittest.TestCase):
         )
         connection.commit()
         connection.close()
+        main.login_limiter.reset()
+        signed_in = cls.client.post("/login", json={"email": cls.email, "password": "integration-pass"})
+        assert signed_in.status_code == 200, signed_in.text
 
     @classmethod
     def tearDownClass(cls):

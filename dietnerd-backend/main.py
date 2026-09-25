@@ -1,7 +1,8 @@
 from helper_functions import *
 from conversation_store import append_turn
+import auth
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Query, UploadFile, File, Form
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Query, UploadFile, File, Form, Depends, Request, Response
 from fastapi.responses import StreamingResponse
 from starlette.responses import JSONResponse
 
@@ -36,14 +37,19 @@ update_queues = defaultdict(asyncio.Queue)
 
 app = FastAPI()
 
-origins = ["*"]
+def _allowed_origins():
+    configured = os.getenv("ALLOWED_ORIGINS", "")
+    origins = [o.strip().rstrip("/") for o in configured.split(",") if o.strip()]
+    return origins or ["http://localhost:8080", "http://127.0.0.1:8080", "http://localhost:5500", "http://127.0.0.1:5500"]
+
+origins = _allowed_origins()
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 @app.on_event("startup")
@@ -110,6 +116,45 @@ def create_tables():
                 FOREIGN KEY (email) REFERENCES users(email) ON DELETE CASCADE
             )
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_sessions (
+                token_hash CHAR(64) PRIMARY KEY,
+                email VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at DATETIME NOT NULL,
+                INDEX idx_sessions_email (email),
+                FOREIGN KEY (email) REFERENCES users(email) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS password_resets (
+                token_hash CHAR(64) PRIMARY KEY,
+                email VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at DATETIME NOT NULL,
+                used_at DATETIME NULL,
+                INDEX idx_resets_email (email),
+                FOREIGN KEY (email) REFERENCES users(email) ON DELETE CASCADE
+            )
+        """)
+        # Answer cache and article tables used by the research pipeline. They
+        # already exist on the shared DietNerd database; creating them here
+        # lets a clean database boot.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS question_answer (
+                question TEXT,
+                answer LONGTEXT NOT NULL,
+                question_id INT NOT NULL AUTO_INCREMENT,
+                to_save TINYINT(1) DEFAULT NULL,
+                PRIMARY KEY (question_id)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS article_analysis (
+                article_id VARCHAR(45) NOT NULL PRIMARY KEY,
+                article_json LONGTEXT NOT NULL
+            )
+        """)
         connection.commit()
         logging.info("[STARTUP] Database tables verified/created")
     finally:
@@ -117,15 +162,31 @@ def create_tables():
 
 class QueryModel(BaseModel):
     user_query: str
-    email: str
+    # Ignored: the user always comes from the session. Kept optional so older
+    # clients that still send it are not rejected.
+    email: Optional[str] = None
     conversation_id: Optional[str] = None
 
 class AuthModel(BaseModel):
     email: str
     password: str
 
-def _hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+class ForgotPasswordModel(BaseModel):
+    email: str
+
+class ResetPasswordModel(BaseModel):
+    token: str
+    password: str
+
+class ChangePasswordModel(BaseModel):
+    current_password: str
+    new_password: str
+
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_MB", "5")) * 1024 * 1024
+ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".txt", ".csv"}
+login_limiter = auth.RateLimiter(limit=10, window_seconds=300)
+reset_limiter = auth.RateLimiter(limit=5, window_seconds=900)
+request_owners: Dict[str, str] = {}
 
 def _get_db_connection():
     return mysql.connector.connect(
@@ -136,29 +197,125 @@ def _get_db_connection():
         database=os.getenv('database')
     )
 
+def _client_key(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    return (forwarded.split(",")[0].strip() if forwarded else "") or (request.client.host if request.client else "unknown")
+
+def _create_session(email: str) -> str:
+    token = auth.new_token()
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute(
+            "INSERT INTO user_sessions (token_hash, email, expires_at) "
+            "VALUES (%s, %s, DATE_ADD(UTC_TIMESTAMP(), INTERVAL %s SECOND))",
+            (auth.token_digest(token), email, auth.SESSION_TTL_SECONDS),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    return token
+
+def _set_session_cookie(response: Response, token: str):
+    response.set_cookie(auth.SESSION_COOKIE, token, max_age=auth.SESSION_TTL_SECONDS, **auth.cookie_settings())
+
+def _clear_session_cookie(response: Response):
+    settings = auth.cookie_settings()
+    response.delete_cookie(auth.SESSION_COOKIE, path=settings["path"], samesite=settings["samesite"], secure=settings["secure"], httponly=True)
+
+def _session_token(request: Request) -> Optional[str]:
+    header = request.headers.get("authorization", "")
+    if header.lower().startswith("bearer "):
+        return header[7:].strip() or None
+    return request.cookies.get(auth.SESSION_COOKIE)
+
+def _email_for_token(token: Optional[str]) -> Optional[str]:
+    if not token:
+        return None
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute(
+            "SELECT email FROM user_sessions WHERE token_hash = %s AND expires_at > UTC_TIMESTAMP()",
+            (auth.token_digest(token),),
+        )
+        row = cursor.fetchone()
+        return row[0] if row else None
+    finally:
+        connection.close()
+
+def current_user(request: Request) -> str:
+    email = _email_for_token(_session_token(request))
+    if not email:
+        raise HTTPException(status_code=401, detail="Please sign in.")
+    return email
+
+def _revoke_sessions(email: str, keep_token: Optional[str] = None):
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        if keep_token:
+            cursor.execute(
+                "DELETE FROM user_sessions WHERE email = %s AND token_hash <> %s",
+                (email, auth.token_digest(keep_token)),
+            )
+        else:
+            cursor.execute("DELETE FROM user_sessions WHERE email = %s", (email,))
+        connection.commit()
+    finally:
+        connection.close()
+
+def _set_password(email: str, password: str):
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("UPDATE users SET password = %s WHERE email = %s", (auth.hash_password(password), email))
+        connection.commit()
+    finally:
+        connection.close()
+
+@app.get("/health")
+async def health():
+    try:
+        connection = _get_db_connection()
+        try:
+            cursor = connection.cursor()
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        finally:
+            connection.close()
+    except Exception:
+        return JSONResponse({"status": "degraded", "database": "unreachable"}, status_code=503)
+    return {"status": "ok", "database": "ok"}
+
 @app.post("/register")
-async def register(auth: AuthModel):
-    email = auth.email.strip().lower()
-    password = auth.password
-    if not email or not password:
-        raise HTTPException(status_code=400, detail="Email and password are required.")
+async def register(auth_body: AuthModel, response: Response):
+    email = auth.normalize_email(auth_body.email)
+    password = auth_body.password
+    problem = auth.validate_email(email) or auth.validate_password(password)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
     connection = _get_db_connection()
     try:
         cursor = connection.cursor()
         cursor.execute("SELECT email FROM users WHERE email = %s", (email,))
         if cursor.fetchone():
-            raise HTTPException(status_code=409, detail="User already exists.")
-        cursor.execute("INSERT INTO users (email, password) VALUES (%s, %s)", (email, _hash_password(password)))
+            raise HTTPException(status_code=409, detail="An account with this email already exists. Try signing in or resetting your password.")
+        cursor.execute("INSERT INTO users (email, password) VALUES (%s, %s)", (email, auth.hash_password(password)))
         connection.commit()
     finally:
         connection.close()
-    logging.info(f"[AUTH] Registered new user: {email}")
-    return {"message": "Registration successful."}
+    logging.info("[AUTH] Registered new user")
+    token = _create_session(email)
+    _set_session_cookie(response, token)
+    return {"message": "Registration successful.", "email": email}
 
 @app.post("/login")
-async def login(auth: AuthModel):
-    email = auth.email.strip().lower()
-    password = auth.password
+async def login(auth_body: AuthModel, request: Request, response: Response):
+    email = auth.normalize_email(auth_body.email)
+    password = auth_body.password or ""
+    if not login_limiter.allow(f"{_client_key(request)}|{email}"):
+        raise HTTPException(status_code=429, detail="Too many sign-in attempts. Please wait a few minutes and try again.")
     connection = _get_db_connection()
     try:
         cursor = connection.cursor()
@@ -167,11 +324,114 @@ async def login(auth: AuthModel):
     finally:
         connection.close()
     if not row:
-        raise HTTPException(status_code=401, detail="User not found.")
-    if row[0] != _hash_password(password):
-        raise HTTPException(status_code=401, detail="Incorrect password.")
-    logging.info(f"[AUTH] Login successful: {email}")
+        auth.burn_time(password)
+        raise HTTPException(status_code=401, detail="Incorrect email or password.")
+    ok, needs_upgrade = auth.verify_password(password, row[0])
+    if not ok:
+        raise HTTPException(status_code=401, detail="Incorrect email or password.")
+    if needs_upgrade:
+        _set_password(email, password)
+        logging.info("[AUTH] Upgraded legacy password hash to bcrypt")
+    token = _create_session(email)
+    _set_session_cookie(response, token)
     return {"message": "Login successful.", "email": email}
+
+@app.post("/logout")
+async def logout(request: Request, response: Response):
+    token = _session_token(request)
+    if token:
+        connection = _get_db_connection()
+        try:
+            cursor = connection.cursor()
+            cursor.execute("DELETE FROM user_sessions WHERE token_hash = %s", (auth.token_digest(token),))
+            connection.commit()
+        finally:
+            connection.close()
+    _clear_session_cookie(response)
+    return {"status": "ok"}
+
+@app.get("/me")
+async def me(email: str = Depends(current_user)):
+    return {"email": email}
+
+@app.post("/forgot_password")
+async def forgot_password(body: ForgotPasswordModel, request: Request):
+    email = auth.normalize_email(body.email)
+    generic = {"message": "If an account exists for that email, we've sent a link to reset the password."}
+    if not reset_limiter.allow(f"{_client_key(request)}|{email}"):
+        raise HTTPException(status_code=429, detail="Too many reset requests. Please wait a few minutes and try again.")
+    if auth.validate_email(email):
+        return generic
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT 1 FROM users WHERE email = %s", (email,))
+        exists = cursor.fetchone() is not None
+        if not exists:
+            return generic
+        token = auth.new_token()
+        # One live reset link per account.
+        cursor.execute("DELETE FROM password_resets WHERE email = %s", (email,))
+        cursor.execute(
+            "INSERT INTO password_resets (token_hash, email, expires_at) "
+            "VALUES (%s, %s, DATE_ADD(UTC_TIMESTAMP(), INTERVAL %s SECOND))",
+            (auth.token_digest(token), email, auth.RESET_TTL_SECONDS),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    base = os.getenv("PUBLIC_SITE_URL", "").rstrip("/") or (request.headers.get("origin") or "").rstrip("/")
+    reset_url = f"{base}/login.html#reset_token={token}"
+    auth.send_reset_email(email, reset_url)
+    return generic
+
+@app.post("/reset_password")
+async def reset_password(body: ResetPasswordModel):
+    problem = auth.validate_password(body.password)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
+    digest = auth.token_digest(body.token or "")
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        connection.start_transaction()
+        cursor.execute(
+            "SELECT email FROM password_resets WHERE token_hash = %s AND used_at IS NULL "
+            "AND expires_at > UTC_TIMESTAMP() FOR UPDATE",
+            (digest,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            connection.rollback()
+            raise HTTPException(status_code=400, detail="This reset link is invalid or has expired. Please request a new one.")
+        email = row[0]
+        cursor.execute("UPDATE password_resets SET used_at = UTC_TIMESTAMP() WHERE token_hash = %s", (digest,))
+        cursor.execute("UPDATE users SET password = %s WHERE email = %s", (auth.hash_password(body.password), email))
+        cursor.execute("DELETE FROM user_sessions WHERE email = %s", (email,))
+        connection.commit()
+    finally:
+        connection.close()
+    logging.info("[AUTH] Password reset completed")
+    return {"message": "Your password has been reset. Please sign in with the new password."}
+
+@app.post("/change_password")
+async def change_password(body: ChangePasswordModel, request: Request, email: str = Depends(current_user)):
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT password FROM users WHERE email = %s", (email,))
+        row = cursor.fetchone()
+    finally:
+        connection.close()
+    ok, _ = auth.verify_password(body.current_password or "", row[0] if row else "")
+    if not ok:
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+    problem = auth.validate_password(body.new_password)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
+    _set_password(email, body.new_password)
+    _revoke_sessions(email, keep_token=_session_token(request))
+    return {"message": "Password updated. Other devices have been signed out."}
 
 disclaimer = """
 DietNerd is an exploratory tool designed to enrich your conversations with a registered dietitian or registered dietitian nutritionist, who can then review your profile before providing recommendations.
@@ -194,13 +454,14 @@ async def root():
     return "Hello! Go to /docs!'"
 
 @app.get("/db_sim_search/{question:str}")
-async def sim_search(question:str):
+async def sim_search(question:str, email: str = Depends(current_user)):
    decoded_query = unquote(question)
    result = await sim_score(decoded_query)
    return result
 
 @app.post("/cached_answer")
-async def cached_answer(query: QueryModel):
+async def cached_answer(query: QueryModel, email: str = Depends(current_user)):
+    query.email = email
     conversation_id = query.conversation_id
     if conversation_id and not conversation_belongs_to(query.email, conversation_id):
         raise HTTPException(status_code=404, detail="Conversation not found.")
@@ -239,7 +500,7 @@ async def cached_answer(query: QueryModel):
     }
 
 @app.get("/check_valid/{question:str}")
-async def check_valid(question:str):
+async def check_valid(question:str, email: str = Depends(current_user)):
    question_validity = determine_question_validity(question)
    if question_validity == 'False - Meal Plan/Recipe':
     final_output = ("I'm sorry, I cannot help you with this question. For any questions or advice around meal planning or recipes, please speak to a registered dietitian or registered dietitian nutritionist.\n"
@@ -321,11 +582,11 @@ def append_session_memory(email: str, conversation_id: str, entry: dict):
     return append_turn(_get_db_connection, email, conversation_id, entry)
 
 @app.post("/conversations")
-async def new_conversation(email: str = Query(...)):
+async def new_conversation(email: str = Depends(current_user)):
     return {"conversation_id": create_conversation(email)}
 
 @app.get("/conversations")
-async def list_conversations(email: str = Query(...)):
+async def list_conversations(email: str = Depends(current_user)):
     connection = _get_db_connection()
     try:
         cursor = connection.cursor(dictionary=True)
@@ -335,7 +596,7 @@ async def list_conversations(email: str = Query(...)):
         connection.close()
 
 @app.delete("/conversations/{conversation_id}")
-async def delete_conversation(conversation_id: str, email: str = Query(...)):
+async def delete_conversation(conversation_id: str, email: str = Depends(current_user)):
     connection = _get_db_connection()
     try:
         cursor = connection.cursor()
@@ -351,14 +612,14 @@ async def delete_conversation(conversation_id: str, email: str = Query(...)):
     return {"status": "ok"}
 
 @app.get("/session_memory")
-async def read_session_memory(email: str = Query(...), conversation_id: str = Query(...)):
+async def read_session_memory(conversation_id: str = Query(...), email: str = Depends(current_user)):
     if not conversation_belongs_to(email, conversation_id):
         raise HTTPException(status_code=404, detail="Conversation not found.")
     entries = get_session_memory(email, conversation_id)
     return {"entries": entries, "count": len(entries), "conversation_summary": get_conversation_summary(email, conversation_id)}
 
 @app.delete("/session_memory")
-async def reset_session_memory(email: str = Query(...), conversation_id: str = Query(...)):
+async def reset_session_memory(conversation_id: str = Query(...), email: str = Depends(current_user)):
     if not conversation_belongs_to(email, conversation_id):
         raise HTTPException(status_code=404, detail="Conversation not found.")
     connection = _get_db_connection()
@@ -376,16 +637,23 @@ async def reset_session_memory(email: str = Query(...), conversation_id: str = Q
     return {"status": "ok"}
 
 @app.post("/upload_attachment")
-async def upload_attachment(attachment: UploadFile = File(...), email: str = Form(...)):
-    file_bytes = await attachment.read()
-    attachment_text = extract_text_from_upload(file_bytes, attachment.filename)
+async def upload_attachment(attachment: UploadFile = File(...), email: str = Depends(current_user)):
+    filename = os.path.basename((attachment.filename or "").replace("\\", "/")).strip()
+    if not filename or len(filename) > 255:
+        raise HTTPException(status_code=400, detail="Please choose a file with a valid name.")
+    if os.path.splitext(filename)[1].lower() not in ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Only PDF, TXT and CSV files are supported.")
+    file_bytes = await attachment.read(MAX_UPLOAD_BYTES + 1)
+    if len(file_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"Files must be {MAX_UPLOAD_BYTES // (1024 * 1024)} MB or smaller.")
+    attachment_text = extract_text_from_upload(file_bytes, filename)
 
     connection = _get_db_connection()
     try:
         cursor = connection.cursor()
         cursor.execute(
             "INSERT INTO user_documents (email, filename, content) VALUES (%s, %s, %s) ON DUPLICATE KEY UPDATE content = %s",
-            (email, attachment.filename, attachment_text, attachment_text)
+            (email, filename, attachment_text, attachment_text)
         )
         connection.commit()
     finally:
@@ -393,7 +661,7 @@ async def upload_attachment(attachment: UploadFile = File(...), email: str = For
     return JSONResponse({"status": "ok"})
 
 @app.get("/list_attachments")
-async def list_attachments(email: str = Query(...)):
+async def list_attachments(email: str = Depends(current_user)):
     connection = _get_db_connection()
     try:
         cursor = connection.cursor()
@@ -404,7 +672,7 @@ async def list_attachments(email: str = Query(...)):
     return JSONResponse({"documents": [row[0] for row in rows]})
 
 @app.delete("/remove_attachment")
-async def remove_attachment(filename: str = Query(...), email: str = Query(...)):
+async def remove_attachment(filename: str = Query(...), email: str = Depends(current_user)):
     connection = _get_db_connection()
     try:
         cursor = connection.cursor()
@@ -415,7 +683,8 @@ async def remove_attachment(filename: str = Query(...), email: str = Query(...))
     return JSONResponse({"status": "ok"})
 
 @app.post("/process_query")
-async def process_query(background_tasks: BackgroundTasks, query: QueryModel):
+async def process_query(background_tasks: BackgroundTasks, query: QueryModel, email: str = Depends(current_user)):
+    query.email = email
     request_id = str(uuid.uuid4())
     conversation_id = query.conversation_id
     if conversation_id and not conversation_belongs_to(query.email, conversation_id):
@@ -423,13 +692,16 @@ async def process_query(background_tasks: BackgroundTasks, query: QueryModel):
     if not conversation_id:
         conversation_id = create_conversation(query.email, query.user_query[:120])
     update_queues[request_id]
+    request_owners[request_id] = email
     background_tasks.add_task(process_user_query, query.user_query, request_id, query.email, conversation_id)
     return JSONResponse({"request_id": request_id, "conversation_id": conversation_id})
 
 @app.get("/sse")
-async def sse(request_id: str = Query(default=None)):
+async def sse(request_id: str = Query(default=None), email: str = Depends(current_user)):
     if not request_id:
         raise HTTPException(status_code=400, detail="request_id is required")
+    if request_owners.get(request_id) != email:
+        raise HTTPException(status_code=404, detail="Request not found.")
     return EventSourceResponse(event_generator(request_id))
 
 async def event_generator(request_id: str):
@@ -443,6 +715,7 @@ async def event_generator(request_id: str):
             yield {"event": "message", "data": json.dumps({"update": data})}
     finally:
         update_queues.pop(request_id, None)
+        request_owners.pop(request_id, None)
 
 def check_attachment_exists(email: str):
     connection = _get_db_connection()
