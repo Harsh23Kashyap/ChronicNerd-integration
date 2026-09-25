@@ -10,3 +10,4 @@ ATT81274.env
 # Browser test dependencies
 node_modules/
 tests/browser-upload.txt
+.env

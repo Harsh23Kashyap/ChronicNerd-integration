@@ -115,36 +115,80 @@ class RateLimiter:
         self.hits.clear()
 
 
-def send_reset_email(to_email: str, reset_url: str) -> bool:
-    """Send the reset link over SMTP when configured; otherwise log it.
+RESET_SUBJECT = "Reset your DietNerd password"
 
-    Required env for real delivery: SMTP_HOST, SMTP_PORT, SMTP_USER,
-    SMTP_PASSWORD, MAIL_FROM. Without them (local development) the link is
-    written to the server log so the flow can still be exercised.
-    """
-    host = os.getenv("SMTP_HOST")
-    body = (
+
+def _reset_body(reset_url: str) -> str:
+    return (
         "Someone asked to reset the password for your DietNerd account.\n\n"
         f"Use this link within {RESET_TTL_SECONDS // 60} minutes to choose a new password:\n"
         f"{reset_url}\n\n"
         "If you did not ask for this, you can ignore this email. Your password has not changed.\n"
     )
-    if not host:
-        logging.warning("[AUTH] SMTP not configured; password reset link for %s: %s", to_email, reset_url)
-        return False
+
+
+def _ses_client():
+    import boto3  # imported lazily so local development does not need AWS
+
+    return boto3.client("ses", region_name=os.getenv("AWS_SES_REGION") or os.getenv("AWS_REGION") or "us-east-1")
+
+
+def _send_via_ses(to_email: str, body: str) -> bool:
+    """Amazon SES. Needs MAIL_FROM (a verified SES identity) and AWS_SES_REGION;
+    credentials come from the normal AWS chain (env vars, profile, or instance role)."""
+    _ses_client().send_email(
+        Source=os.environ["MAIL_FROM"],
+        Destination={"ToAddresses": [to_email]},
+        Message={
+            "Subject": {"Data": RESET_SUBJECT, "Charset": "UTF-8"},
+            "Body": {"Text": {"Data": body, "Charset": "UTF-8"}},
+        },
+    )
+    return True
+
+
+def _send_via_smtp(to_email: str, body: str) -> bool:
     msg = EmailMessage()
-    msg["Subject"] = "Reset your DietNerd password"
+    msg["Subject"] = RESET_SUBJECT
     msg["From"] = os.getenv("MAIL_FROM", os.getenv("SMTP_USER", ""))
     msg["To"] = to_email
     msg.set_content(body)
     port = int(os.getenv("SMTP_PORT", "587"))
+    with smtplib.SMTP(os.environ["SMTP_HOST"], port, timeout=15) as smtp:
+        smtp.starttls()
+        if os.getenv("SMTP_USER"):
+            smtp.login(os.getenv("SMTP_USER"), os.getenv("SMTP_PASSWORD", ""))
+        smtp.send_message(msg)
+    return True
+
+
+def mail_backend() -> str:
+    """Which delivery path is configured: "ses", "smtp", or "log".
+
+    MAIL_BACKEND=ses|smtp|log picks one explicitly. Otherwise SES is used when
+    MAIL_FROM and an SES region are set, SMTP when SMTP_HOST is set, and the
+    reset link is only logged (local development) when neither is.
+    """
+    choice = (os.getenv("MAIL_BACKEND") or "").strip().lower()
+    if choice in {"ses", "smtp", "log"}:
+        return choice
+    if os.getenv("MAIL_FROM") and (os.getenv("AWS_SES_REGION") or os.getenv("AWS_REGION")):
+        return "ses"
+    if os.getenv("SMTP_HOST"):
+        return "smtp"
+    return "log"
+
+
+def send_reset_email(to_email: str, reset_url: str) -> bool:
+    """Deliver the reset link. Returns False (and logs) on any failure; the
+    caller never reveals delivery problems or whether the account exists."""
+    body = _reset_body(reset_url)
+    backend = mail_backend()
+    if backend == "log":
+        logging.warning("[AUTH] No mail backend configured; password reset link for %s: %s", to_email, reset_url)
+        return False
     try:
-        with smtplib.SMTP(host, port, timeout=15) as smtp:
-            smtp.starttls()
-            if os.getenv("SMTP_USER"):
-                smtp.login(os.getenv("SMTP_USER"), os.getenv("SMTP_PASSWORD", ""))
-            smtp.send_message(msg)
-        return True
-    except Exception:  # never reveal delivery problems to the caller
-        logging.exception("[AUTH] Failed to send password reset email")
+        return _send_via_ses(to_email, body) if backend == "ses" else _send_via_smtp(to_email, body)
+    except Exception:
+        logging.exception("[AUTH] Failed to send password reset email via %s", backend)
         return False

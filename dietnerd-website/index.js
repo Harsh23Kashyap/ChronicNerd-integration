@@ -378,7 +378,7 @@ const getAnalysisText = (fullText) => {
   const iconStyle = 'width: 16px; height: 16px; vertical-align: middle; margin-right: 4px;';
   const analysisText = fullText ? 'Full Text Analysis' : 'Abstract Only Analysis';
   const imageUrl = fullText ? 'assets/full_text.png' : 'assets/abstract.png';
-  return `<span style="color: black; font-weight: bold; border: 1px solid ${fullText ? 'green' : 'yellow'}; padding: 2px 4px; background-color: rgba(${fullText ? '0, 128, 0' : '255, 255, 0'}, 0.1); display: inline-flex; align-items: center;"><img src="${imageUrl}" alt="${analysisText}" style="${iconStyle}"><img src="${imageUrl}" alt="${analysisText}" style="${iconStyle}">${analysisText}</span>`;
+  return `<span style="color: black; font-weight: bold; border: 1px solid ${fullText ? 'green' : 'yellow'}; padding: 2px 4px; background-color: rgba(${fullText ? '0, 128, 0' : '255, 255, 0'}, 0.1); display: inline-flex; align-items: center;"><img src="${imageUrl}" alt="" style="${iconStyle}">${analysisText}</span>`;
 };
 
 

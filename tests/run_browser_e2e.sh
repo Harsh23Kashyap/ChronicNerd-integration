@@ -7,7 +7,9 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT"
 PY=${PYTHON:-python3}
 export ALLOWED_ORIGINS=http://localhost:18080 OPENAI_API_KEY=${OPENAI_API_KEY:-test-key}
-# A previous run's servers may still be shutting down; wait until the ports are free.
+# A previous run's servers may still be shutting down; stop them and wait until the ports are free.
+pkill -f 'tests/browser_test_server.py' 2>/dev/null || true
+pkill -f 'http.server 18080' 2>/dev/null || true
 for _ in $(seq 1 30); do
   curl -s -o /dev/null http://localhost:8000/health || curl -s -o /dev/null http://localhost:18080/ || break
   sleep 0.5

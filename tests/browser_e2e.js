@@ -12,7 +12,7 @@ const assert = require('assert');
   page.on('pageerror', err => log.push('pageerror: ' + err.message));
 
   await page.goto('http://localhost:18080/index.html');
-  await page.waitForURL('**/login.html');  // no session yet
+  await page.waitForURL('**/login.html', {waitUntil: 'domcontentloaded'});  // no session yet
   await page.click('[data-show="register-form"]');
   await page.fill('#register-email', email);
   await page.fill('#register-password', password);
@@ -21,7 +21,7 @@ const assert = require('assert');
   assert.match(await page.textContent('#register-error'), /do not match/);
   await page.fill('#register-confirm', password);
   await page.click('#register-button');
-  await page.waitForURL('**/index.html');
+  await page.waitForURL('**/index.html', {waitUntil: 'domcontentloaded'});
   await page.waitForFunction(() => document.getElementById('account-email').textContent.includes('@'));
   assert.equal(await page.textContent('#account-email'), email);
   const cookies = await page.context().cookies();
@@ -79,9 +79,9 @@ const assert = require('assert');
   // Sign out, then reset the password through the emailed link.
   await page.click('#account-button');
   await page.click('#logout-link');
-  await page.waitForURL('**/login.html');
+  await page.waitForURL('**/login.html', {waitUntil: 'domcontentloaded'});
   await page.goto('http://localhost:18080/index.html');
-  await page.waitForURL('**/login.html');
+  await page.waitForURL('**/login.html', {waitUntil: 'domcontentloaded'});
   await page.click('[data-show="forgot-form"]');
   await page.fill('#forgot-email', email);
   await page.click('#forgot-button');
@@ -103,7 +103,7 @@ const assert = require('assert');
   assert.match(await page.textContent('#login-error'), /Incorrect email or password/);
   await page.fill('#login-password', 'a brand new password');
   await page.click('#login-button');
-  await page.waitForURL('**/index.html');
+  await page.waitForURL('**/index.html', {waitUntil: 'domcontentloaded'});
   fs.unlinkSync('tests/browser-upload.txt');
   assert.equal(log.filter(line => line.startsWith('pageerror:')).length, 0, log.join('\n'));
   console.log(JSON.stringify({status: 'passed', firstConversation, secondConversation, browser: await browser.version(), consoleEvents: log.length}));

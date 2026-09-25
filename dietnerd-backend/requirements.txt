@@ -212,3 +212,4 @@ zipp==3.18.1
 PyMuPDF==1.27.2.3
 scikit-learn==1.5.2
 sse-starlette==1.8.2
+boto3>=1.34

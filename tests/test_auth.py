@@ -254,3 +254,46 @@ class AuthTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestResetMailBackends:
+    """Mail delivery selection; no network (SES client and SMTP are stubbed)."""
+
+    def _clear(self, monkeypatch):
+        for key in ("MAIL_BACKEND", "MAIL_FROM", "AWS_SES_REGION", "AWS_REGION", "SMTP_HOST"):
+            monkeypatch.delenv(key, raising=False)
+
+    def test_log_backend_when_nothing_configured(self, monkeypatch):
+        self._clear(monkeypatch)
+        assert main.auth.mail_backend() == "log"
+        assert main.auth.send_reset_email("a@example.com", "http://x/#reset_token=t") is False
+
+    def test_ses_sends_text_mail_with_link(self, monkeypatch):
+        self._clear(monkeypatch)
+        monkeypatch.setenv("MAIL_FROM", "no-reply@dietnerd.example")
+        monkeypatch.setenv("AWS_SES_REGION", "us-east-1")
+        sent = {}
+
+        class FakeSES:
+            def send_email(self, **kwargs):
+                sent.update(kwargs)
+                return {"MessageId": "fake"}
+
+        monkeypatch.setattr(main.auth, "_ses_client", lambda: FakeSES())
+        assert main.auth.mail_backend() == "ses"
+        assert main.auth.send_reset_email("a@example.com", "http://x/#reset_token=t") is True
+        assert sent["Source"] == "no-reply@dietnerd.example"
+        assert sent["Destination"] == {"ToAddresses": ["a@example.com"]}
+        assert "http://x/#reset_token=t" in sent["Message"]["Body"]["Text"]["Data"]
+
+    def test_ses_failure_is_swallowed(self, monkeypatch):
+        self._clear(monkeypatch)
+        monkeypatch.setenv("MAIL_BACKEND", "ses")
+        monkeypatch.setenv("MAIL_FROM", "no-reply@dietnerd.example")
+
+        class BrokenSES:
+            def send_email(self, **kwargs):
+                raise RuntimeError("MessageRejected: Email address is not verified")
+
+        monkeypatch.setattr(main.auth, "_ses_client", lambda: BrokenSES())
+        assert main.auth.send_reset_email("a@example.com", "http://x/#reset_token=t") is False
