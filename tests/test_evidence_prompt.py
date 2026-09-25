@@ -71,6 +71,12 @@ class ComparisonGateTest(unittest.TestCase):
 
 
 class ComparisonSourceQualityTest(unittest.TestCase):
+    def test_two_arms_in_unrelated_sentences_do_not_qualify(self):
+        source = {'title': 'Nutrition review', 'abstract':
+                  'The Mediterranean diet was reviewed for healthy adults. '
+                  'A different study compared low-carbohydrate diets with usual care.'}
+        self.assertFalse(h.article_directly_compares(source, 'mediterranean diet', 'low-carbohydrate diets'))
+
     def test_generated_summary_cannot_make_a_source_qualify(self):
         source = {'title': 'Mediterranean diet and CKD',
                   'summary': 'Compared Mediterranean and low-carbohydrate diets'}

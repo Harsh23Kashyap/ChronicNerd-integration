@@ -1600,14 +1600,19 @@ def article_directly_compares(article: dict, first: str, second: str) -> bool:
   if isinstance(abstract, list):
     abstract = ' '.join(str(part) for part in abstract)
   canonical = lambda value: re.sub(r"[-‐‑–]", " ", str(value or '').lower())
-  text = canonical(title) + ' ' + canonical(abstract)
-  if not text.strip():
+  if not str(title or '').strip() and not str(abstract or '').strip():
     return False
-  def mentions(arm):
+  def mentions(sentence, arm):
     words = canonical(arm).split()
-    return all(re.search(r"\b" + re.escape(word.rstrip('s')) + r"s?\b", text) for word in words)
-  return (mentions(first) and mentions(second) and
-          bool(re.search(r"\b(?:versus|vs\.?|compar(?:e|ed|ison|ative|ing)|head.to.head|randomi[sz]ed)\b", text)))
+    return bool(words) and all(re.search(r"\b" + re.escape(word.rstrip('s')) + r"s?\b", sentence) for word in words)
+  # A comparative word elsewhere in a long abstract is not proof that these two
+  # arms were compared. Require both arms and comparison language in one sentence.
+  # Even this is only a candidate gate; populations/endpoints need validation.
+  for sentence in re.split(r"[.!?]\s+|[\n;]+", canonical(title) + '. ' + canonical(abstract)):
+    if (mentions(sentence, first) and mentions(sentence, second) and
+        re.search(r"\b(?:versus|vs\.?|compar(?:e|ed|ison|ative|ing)|head.to.head|randomi[sz]ed)\b", sentence)):
+      return True
+  return False
 
 
 def enforce_three_part_answer(answer: str) -> str:
