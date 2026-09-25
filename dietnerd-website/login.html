@@ -11,133 +11,85 @@
     <div class="login-container">
         <a href="login.html"><img src="assets/dietnerd_logo.png" alt="DietNerd Logo" class="logo"></a>
 
-        <!-- Login Form -->
-        <div id="login-form">
+        <!-- Sign in -->
+        <form id="login-form" class="auth-form" novalidate>
             <h2>Sign in to continue</h2>
             <div class="form-group">
                 <label for="login-email">Email</label>
-                <input type="email" id="login-email" placeholder="you@example.com">
+                <input type="email" id="login-email" autocomplete="email" placeholder="you@example.com" required>
             </div>
             <div class="form-group">
                 <label for="login-password">Password</label>
-                <input type="password" id="login-password" placeholder="Enter your password">
+                <div class="password-field">
+                    <input type="password" id="login-password" autocomplete="current-password" placeholder="Enter your password" required>
+                    <button type="button" class="toggle-password" data-target="login-password" aria-label="Show password">Show</button>
+                </div>
             </div>
-            <button class="auth-button" id="login-button">Sign In</button>
-            <div id="login-error" class="error-message"></div>
-            <p class="toggle-text">Don't have an account? <a id="show-register">Register</a></p>
-        </div>
+            <p class="forgot-row"><a href="#" data-show="forgot-form">Forgot password?</a></p>
+            <button type="submit" class="auth-button" id="login-button">Sign in</button>
+            <div id="login-error" class="error-message" role="alert"></div>
+            <div id="login-info" class="success-message" role="status"></div>
+            <p class="toggle-text">Don't have an account? <a href="#" data-show="register-form">Create one</a></p>
+        </form>
 
-        <!-- Register Form -->
-        <div id="register-form" style="display:none;">
+        <!-- Register -->
+        <form id="register-form" class="auth-form" hidden novalidate>
             <h2>Create your account</h2>
             <div class="form-group">
                 <label for="register-email">Email</label>
-                <input type="email" id="register-email" placeholder="you@example.com">
+                <input type="email" id="register-email" autocomplete="email" placeholder="you@example.com" required>
             </div>
             <div class="form-group">
                 <label for="register-password">Password</label>
-                <input type="password" id="register-password" placeholder="Choose a password">
+                <div class="password-field">
+                    <input type="password" id="register-password" autocomplete="new-password" placeholder="At least 8 characters" minlength="8" required>
+                    <button type="button" class="toggle-password" data-target="register-password" aria-label="Show password">Show</button>
+                </div>
             </div>
-            <button class="auth-button" id="register-button">Register</button>
-            <div id="register-error" class="error-message"></div>
-            <div id="register-success" class="success-message"></div>
-            <p class="toggle-text">Already have an account? <a id="show-login">Sign In</a></p>
-        </div>
+            <div class="form-group">
+                <label for="register-confirm">Confirm password</label>
+                <input type="password" id="register-confirm" autocomplete="new-password" placeholder="Type it again" required>
+            </div>
+            <button type="submit" class="auth-button" id="register-button">Create account</button>
+            <div id="register-error" class="error-message" role="alert"></div>
+            <p class="toggle-text">Already have an account? <a href="#" data-show="login-form">Sign in</a></p>
+        </form>
+
+        <!-- Forgot password -->
+        <form id="forgot-form" class="auth-form" hidden novalidate>
+            <h2>Reset your password</h2>
+            <p class="form-intro">Enter the email you signed up with. We'll send you a link to choose a new password.</p>
+            <div class="form-group">
+                <label for="forgot-email">Email</label>
+                <input type="email" id="forgot-email" autocomplete="email" placeholder="you@example.com" required>
+            </div>
+            <button type="submit" class="auth-button" id="forgot-button">Send reset link</button>
+            <div id="forgot-error" class="error-message" role="alert"></div>
+            <div id="forgot-success" class="success-message" role="status"></div>
+            <p class="toggle-text"><a href="#" data-show="login-form">Back to sign in</a></p>
+        </form>
+
+        <!-- Choose new password (from the emailed link) -->
+        <form id="reset-form" class="auth-form" hidden novalidate>
+            <h2>Choose a new password</h2>
+            <div class="form-group">
+                <label for="reset-password">New password</label>
+                <div class="password-field">
+                    <input type="password" id="reset-password" autocomplete="new-password" placeholder="At least 8 characters" minlength="8" required>
+                    <button type="button" class="toggle-password" data-target="reset-password" aria-label="Show password">Show</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="reset-confirm">Confirm new password</label>
+                <input type="password" id="reset-confirm" autocomplete="new-password" placeholder="Type it again" required>
+            </div>
+            <button type="submit" class="auth-button" id="reset-button">Save new password</button>
+            <div id="reset-error" class="error-message" role="alert"></div>
+            <p class="toggle-text"><a href="#" data-show="login-form">Back to sign in</a></p>
+        </form>
     </div>
-
     <script src="env.js"></script>
-    <script>
-        const API_URL = window.env.API_URL;
-
-        // Toggle between forms
-        document.getElementById('show-register').addEventListener('click', function() {
-            document.getElementById('login-form').style.display = 'none';
-            document.getElementById('register-form').style.display = 'block';
-            document.getElementById('register-error').textContent = '';
-            document.getElementById('register-success').textContent = '';
-        });
-
-        document.getElementById('show-login').addEventListener('click', function() {
-            document.getElementById('register-form').style.display = 'none';
-            document.getElementById('login-form').style.display = 'block';
-            document.getElementById('login-error').textContent = '';
-        });
-
-        // Register
-        document.getElementById('register-button').addEventListener('click', async function() {
-            const email = document.getElementById('register-email').value.trim();
-            const password = document.getElementById('register-password').value;
-            const errorEl = document.getElementById('register-error');
-            const successEl = document.getElementById('register-success');
-            errorEl.textContent = '';
-            successEl.textContent = '';
-
-            if (!email || !password) {
-                errorEl.textContent = 'Please fill in both fields.';
-                return;
-            }
-
-            try {
-                const res = await fetch(API_URL + '/register', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({email, password})
-                });
-                const data = await res.json();
-                if (!res.ok) {
-                    errorEl.textContent = data.detail || 'Registration failed.';
-                    return;
-                }
-                successEl.textContent = 'Account created! You can now sign in.';
-                document.getElementById('register-email').value = '';
-                document.getElementById('register-password').value = '';
-            } catch (e) {
-                errorEl.textContent = 'Could not reach the server.';
-            }
-        });
-
-        // Login
-        document.getElementById('login-button').addEventListener('click', async function() {
-            const email = document.getElementById('login-email').value.trim();
-            const password = document.getElementById('login-password').value;
-            const errorEl = document.getElementById('login-error');
-            errorEl.textContent = '';
-
-            if (!email || !password) {
-                errorEl.textContent = 'Please fill in both fields.';
-                return;
-            }
-
-            try {
-                const res = await fetch(API_URL + '/login', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({email, password})
-                });
-                const data = await res.json();
-                if (!res.ok) {
-                    errorEl.textContent = data.detail || 'Login failed.';
-                    return;
-                }
-                sessionStorage.setItem('dietnerd_user', data.email);
-                window.location.href = 'index.html';
-            } catch (e) {
-                errorEl.textContent = 'Could not reach the server.';
-            }
-        });
-
-        // Allow Enter key to submit
-        document.getElementById('login-password').addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') document.getElementById('login-button').click();
-        });
-        document.getElementById('register-password').addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') document.getElementById('register-button').click();
-        });
-
-        // If already logged in, go straight to the app
-        if (sessionStorage.getItem('dietnerd_user')) {
-            window.location.href = 'index.html';
-        }
-    </script>
+    <script src="api.js"></script>
+    <script src="login.js"></script>
 </body>
 </html>

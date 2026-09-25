@@ -1,4 +1,5 @@
 """Local browser-E2E server: real app/DB/SSE with only external science APIs stubbed."""
+import json
 import sys
 
 import uvicorn
@@ -43,5 +44,40 @@ main.process_user_query = fake_process
 main.determine_question_validity = lambda question: "True"
 main.update_conversation_summary = summary
 
+
+def capture_reset(to_email, reset_url):
+    with open("tests/.last-reset-url", "w") as handle:
+        handle.write(reset_url)
+    return True
+
+
+main.auth.send_reset_email = capture_reset
+
+CACHED_QUESTION = "browser cached question"
+CACHED_PAYLOAD = {
+    "end_output": "Cached browser-test answer",
+    "relevant_articles": [],
+    "citations_obj": {},
+    "citations": [],
+}
+
+
+def seed_cached_answer():
+    """Give the E2E flow one known cached answer; the test DB may have been reset."""
+    main.create_tables()
+    db = main._get_db_connection()
+    try:
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM question_answer WHERE question = %s", (CACHED_QUESTION,))
+        cursor.execute(
+            "INSERT INTO question_answer (question, answer) VALUES (%s, %s)",
+            (CACHED_QUESTION, json.dumps(CACHED_PAYLOAD)),
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
+    seed_cached_answer()
     uvicorn.run(main.app, host="127.0.0.1", port=8000)

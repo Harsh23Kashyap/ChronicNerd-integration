@@ -10,7 +10,7 @@ FRONT = (ROOT / "dietnerd-website" / "index.js").read_text()
 class ConversationLifecycleContractTest(unittest.TestCase):
     def test_request_and_conversation_ids_are_distinct(self):
         self.assertIn('"request_id": request_id, "conversation_id": conversation_id', MAIN)
-        self.assertIn('/sse?request_id=${requestId}', FRONT)
+        self.assertIn('/sse?request_id=${encodeURIComponent(data.request_id)}', FRONT)
         self.assertNotIn('/sse?session_id=', FRONT)
 
     def test_query_model_accepts_durable_conversation(self):

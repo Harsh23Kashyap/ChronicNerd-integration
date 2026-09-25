@@ -1,9 +1,7 @@
 
-const baseURL = window.env.API_URL;  // Adjust the base URL as needed
+const baseURL = DietNerdAPI.baseURL;
+const apiFetch = DietNerdAPI.apiFetch;
 
-function getUserEmail() {
-    return sessionStorage.getItem('dietnerd_user') || '';
-}
 
 function getConversationId() {
     return sessionStorage.getItem('dietnerd_conversation_id') || null;
@@ -86,7 +84,7 @@ function appendChatMessage(role, text, references = '') {
 async function refreshConversationList() {
     const select = document.getElementById('conversation-select');
     const currentId = getConversationId() || '';
-    const response = await fetch(`${baseURL}/conversations?email=${encodeURIComponent(getUserEmail())}`);
+    const response = await apiFetch('/conversations');
     if (!response.ok) return;
     const data = await response.json();
     select.innerHTML = '<option value="">New conversation</option>';
@@ -102,9 +100,7 @@ async function refreshConversationList() {
 async function renderSelectedConversation(conversationId) {
     if (!conversationId) return;
     enterConversationMode();
-    const response = await fetch(
-        `${baseURL}/session_memory?email=${encodeURIComponent(getUserEmail())}&conversation_id=${encodeURIComponent(conversationId)}`,
-    );
+    const response = await apiFetch(`/session_memory?conversation_id=${encodeURIComponent(conversationId)}`);
     if (!response.ok) return;
     const data = await response.json();
     const entries = data.entries || [];
@@ -132,7 +128,7 @@ To find a local expert near you, use this website: https://www.eatright.org/find
 async function check_valid(userQuery) {
     console.log("Checking valid");
     try {
-        const response = await fetch(`${baseURL}/check_valid/${userQuery}`);
+        const response = await apiFetch(`/check_valid/${encodeURIComponent(userQuery)}`);
         if (!response.ok) {
             throw new Error('Network response was not ok');
         }
@@ -153,12 +149,11 @@ async function check_valid(userQuery) {
  */
 const getAnswer = async (question) => {
     try {
-        const response = await fetch(`${baseURL}/cached_answer`, {
+        const response = await apiFetch('/cached_answer', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 user_query: question,
-                email: getUserEmail(),
                 conversation_id: getConversationId(),
             }),
         });
@@ -213,9 +208,9 @@ const generate = async (question) => {
 const get_sim = async (question) => {
     console.log("Getting Sim")
     try {
-        const queryUrl = `${baseURL}/db_sim_search/${encodeURIComponent(question)}`;
+        const queryUrl = `/db_sim_search/${encodeURIComponent(question)}`;
         console.log(queryUrl)
-        const response = await fetch(queryUrl);
+        const response = await apiFetch(queryUrl);
         
         if (!response.ok) {
             throw new Error('Network response was not ok');
@@ -294,10 +289,11 @@ const formatReferences = (output) => {
             const fullText = pmcid !== 'None';
             const analysisText = getAnalysisText(fullText);
 
-            const [authors, title, journal] = parseCitation(citation);
-            const citationToDisplay = `<strong>${ref} ${title}</br>${authors}<br>${journal}</strong>`;
+            const [authors, title, journal] = parseCitation(citation).map(escapeHtml);
+            const safeRef = escapeHtml(ref);
+            const citationToDisplay = `<strong>${safeRef} ${title}<br>${authors}<br>${journal}</strong>`;
 
-            return `<a href="reference.html?ref=${ref}" target="_blank">${citationToDisplay}</a> - ${analysisText}`;
+            return `<a href="reference.html?ref=${encodeURIComponent(ref)}" target="_blank" rel="noopener">${citationToDisplay}</a> - ${analysisText}`;
         })
         .filter(Boolean)
         .join('<br><br>');
@@ -559,7 +555,7 @@ async function refreshExistingAttachments() {
     const existingAttachmentsElement = document.getElementById('existing-attachments');
     const label = document.getElementById('attachment-label');
     try {
-        const response = await fetch(`${baseURL}/list_attachments?email=${encodeURIComponent(getUserEmail())}`);
+        const response = await apiFetch('/list_attachments');
         const data = await response.json();
         const documentNames = data.documents || [];
         attachmentExists = documentNames.length > 0;
@@ -595,16 +591,21 @@ document.addEventListener('DOMContentLoaded', function () {
             const file = fileInput.files[0];
             const formData = new FormData();
             formData.append('attachment', file);
-            formData.append('email', getUserEmail());
+            const label = document.getElementById('attachment-label');
+            label.textContent = `Uploading ${file.name}...`;
             try {
-                await fetch(`${baseURL}/upload_attachment`, {
+                const response = await apiFetch('/upload_attachment', {
                     method: 'POST',
                     body: formData,
                 });
                 fileInput.value = '';
+                if (!response.ok) {
+                    label.textContent = await DietNerdAPI.readError(response, 'Upload failed. Please try again.');
+                    return;
+                }
                 await refreshExistingAttachments();
             } catch (err) {
-                console.log('Attachment upload failed:', err);
+                label.textContent = 'Upload failed. Please try again.';
             }
         }
     });
@@ -613,7 +614,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!event.target.matches('.existing-attachment-remove')) return;
         const filename = event.target.dataset.filename;
         try {
-            await fetch(`${baseURL}/remove_attachment?filename=${encodeURIComponent(filename)}&email=${encodeURIComponent(getUserEmail())}`, {
+            await apiFetch(`/remove_attachment?filename=${encodeURIComponent(filename)}`, {
                 method: 'DELETE',
             });
             await refreshExistingAttachments();
@@ -624,220 +625,220 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 /**
- * Handles answering a question when a file is attached, bypassing session
- * memory, the database lookup, and the similar-questions flow entirely.
- *
- * @param {string} question - The user's question.
- * @return {Promise<void>} - A promise that resolves when the answer has been rendered.
+ * Shows an assistant bubble with live progress while an answer is generated.
  */
-async function answerFromAttachment(question) {
-    const answerElement = document.getElementById('output');
-    const referencesElement = document.getElementById('references');
-    const resultsElement = document.getElementById('results');
-    const hintElement = document.querySelector('.hint');
-    const generatePdfButton = document.getElementById('generate-pdf-button');
-    const exampleQuestions = document.getElementById('example-questions');
-
-    resultsElement.style.display = 'flex';
-    hintElement.textContent = '';
-    exampleQuestions.classList.add('hidden');
-    answerElement.innerHTML = '<textarea readonly placeholder="Answer will load here, please wait. This may take a minute. Please do not close or refresh this page...."></textarea>';
-    referencesElement.innerHTML = `<label for="references" class="visually-hidden">References will appear here...</label><textarea id="references" readonly placeholder="References will appear here..."></textarea>`;
-
-    try {
-        const result = await runGeneration(question);
-        const answer = result.end_output;
-        appendChatMessage('assistant', answer, formatReferences(answer));
-        answerElement.innerHTML = formatText(answer);
-        referencesElement.innerHTML = formatReferences(answer);
-        localStorage.setItem('rawOutput', answer);
-        generatePdfButton.classList.remove("hidden");
-    } catch (err) {
-        console.log(err);
-        answerElement.innerHTML = '<textarea readonly placeholder="Error generating the answer. Please try again."></textarea>';
-    }
+function appendPendingMessage() {
+    const thread = document.getElementById('chat-thread');
+    const article = document.createElement('article');
+    article.className = 'chat-message assistant pending';
+    const avatar = document.createElement('span');
+    avatar.className = 'assistant-avatar';
+    avatar.textContent = 'D';
+    const content = document.createElement('div');
+    content.className = 'message-content';
+    const status = document.createElement('p');
+    status.className = 'pending-status';
+    status.textContent = 'Looking at your question...';
+    const note = document.createElement('p');
+    note.className = 'pending-note';
+    note.textContent = 'Searching published research can take a minute. Please keep this page open.';
+    content.append(status, note);
+    article.append(avatar, content);
+    thread.appendChild(article);
+    enterConversationMode();
+    thread.scrollTop = thread.scrollHeight;
+    return {
+        setStatus(text) { status.textContent = text; },
+        remove() { article.remove(); },
+        fail(message, retry) {
+            article.classList.remove('pending');
+            article.classList.add('failed');
+            content.replaceChildren();
+            const text = document.createElement('p');
+            text.textContent = message;
+            content.appendChild(text);
+            if (retry) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'message-sources-button';
+                button.textContent = 'Try again';
+                button.addEventListener('click', () => { article.remove(); retry(); });
+                content.appendChild(button);
+            }
+        },
+    };
 }
 
-async function runGeneration(userQuery) {
-    const answerElement = document.getElementById('output');
-    answerElement.innerText = 'Connecting...\n';
+function showAssistantAnswer(answer) {
+    localStorage.setItem('rawOutput', answer);
+    appendChatMessage('assistant', answer, formatReferences(answer));
+    document.getElementById('generate-pdf-button').classList.remove('hidden');
+}
 
-    return new Promise(async (resolve, reject) => {
-        try {
-            // Start the query. request_id correlates SSE only; conversation_id persists turns.
-            const response = await fetch(`${baseURL}/process_query`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    user_query: userQuery,
-                    email: getUserEmail(),
-                    conversation_id: getConversationId(),
-                }),
-            });
-            if (!response.ok) {
-                throw new Error(`Query request failed (${response.status})`);
-            }
-            const data = await response.json();
-            const requestId = data.request_id;
-            sessionStorage.setItem('dietnerd_conversation_id', data.conversation_id);
-            await refreshConversationList();
+function conversationHasTurns() {
+    return Boolean(getConversationId()) && document.querySelectorAll('#chat-thread .chat-message.user').length > 1;
+}
 
-            console.log("Got request_id:", requestId);
+let questionInFlight = false;
+function setComposerBusy(busy) {
+    questionInFlight = busy;
+    document.getElementById('submit').disabled = busy;
+    document.getElementById('question').setAttribute('aria-busy', busy ? 'true' : 'false');
+}
 
-            const eventSource = new EventSource(`${baseURL}/sse?request_id=${requestId}`);
+async function runGeneration(userQuery, pending) {
+    const response = await apiFetch('/process_query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_query: userQuery, conversation_id: getConversationId() }),
+    });
+    if (!response.ok) {
+        throw new Error(await DietNerdAPI.readError(response, `The question could not be sent (${response.status}).`));
+    }
+    const data = await response.json();
+    sessionStorage.setItem('dietnerd_conversation_id', data.conversation_id);
+    refreshConversationList();
 
-            eventSource.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                console.log('Received data:', data);
-
-                if (data.update) {
-                    
-                    // Check if this is the final update
-                    if (data.update.end_output) {
-                        localStorage.setItem('referenceObject', JSON.stringify(data.update.citations_obj || {}));
-                        localStorage.setItem('citations', JSON.stringify(data.update.citations || []));
-                        localStorage.setItem('allArticles', JSON.stringify(data.update.relevant_articles || []));
-                        console.log("Received final update. Closing EventSource.");
-                        eventSource.close();
-                        resolve(data.update); // Resolve with the full update object
-                    } else {
-                        answerElement.innerText += `${data.update}\n`;
-                    }
-
-                }
-            };
-
-            eventSource.onerror = (error) => {
-                console.error('EventSource failed:', error);
-                answerElement.innerText += 'Error: EventSource failed\n';
+    return new Promise((resolve, reject) => {
+        const eventSource = new EventSource(`${baseURL}/sse?request_id=${encodeURIComponent(data.request_id)}`, { withCredentials: true });
+        eventSource.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+            if (!message.update) return;
+            if (message.update.end_output) {
+                localStorage.setItem('referenceObject', JSON.stringify(message.update.citations_obj || {}));
+                localStorage.setItem('citations', JSON.stringify(message.update.citations || []));
+                localStorage.setItem('allArticles', JSON.stringify(message.update.relevant_articles || []));
                 eventSource.close();
-                reject(error); // Reject the promise on error
-            };
-
-        } catch (error) {
-            console.error('Error:', error);
-            answerElement.innerText += `Error: ${error.message}\n`;
-            reject(error); // Reject the promise on error
-        }
+                resolve(message.update);
+            } else if (pending) {
+                pending.setStatus(String(message.update));
+            }
+        };
+        eventSource.onerror = () => {
+            eventSource.close();
+            reject(new Error('The connection to DietNerd was lost while the answer was being prepared.'));
+        };
     });
 }
 
-
-/**
- * Handles the click event of the submit button.
- * 
- * @returns {Promise<void>} A Promise that resolves when the function completes.
- */
-document.getElementById('submit').addEventListener('click', async (event) => {
-    const question = document.getElementById('question').value.trim();
-    const hasAttachment = attachmentExists;
-    const answerElement = document.getElementById('output');
-    const referencesElement = document.getElementById('references');
-    const resultsElement = document.getElementById('results');
-    const similarQuestionsContainer = document.getElementById('similarQuestions');
-    const hintElement = document.querySelector('.hint')
-    const generatePdfButton = document.getElementById('generate-pdf-button');
-    const exampleQuestions = document.getElementById('example-questions');
-
-    generatePdfButton.classList.add("hidden");
-
-     // Get the results element
-    resultsElement.style.display = 'none'
-    similarQuestionsContainer.style.display = 'none'
-    if (question) {
-        appendChatMessage('user', question);
-        document.getElementById('question').value = '';
-        answerElement.innerHTML = '';
-        referencesElement.innerHTML = '';
-
-        if (hasAttachment) {
-            await answerFromAttachment(question);
+async function generateAnswer(question) {
+    const pending = appendPendingMessage();
+    setComposerBusy(true);
+    try {
+        const validity = await check_valid(question);
+        if (validity && validity.response && validity.response !== 'good') {
+            pending.remove();
+            appendChatMessage('assistant', validity.response);
             return;
         }
-
-        // Standalone-question rewriting happens once inside /process_query.
-
-        try {
-            const answer = await getAnswer(question);
-
-            console.log("Retrieved Answer:" + answer);
-            resultsElement.style.display = 'flex';
-            const formattedAnswer = formatText(answer);
-            const formattedReferences = formatReferences(answer);
-            localStorage.setItem('rawOutput', answer);
-            appendChatMessage('assistant', answer, formattedReferences);
-            answerElement.innerHTML = formattedAnswer;
-            referencesElement.innerHTML = formattedReferences;
-            hintElement.textContent = '';
-            generatePdfButton.classList.remove("hidden");
-            exampleQuestions.classList.add('hidden');
-        } catch (error) {
-            console.log(error)
-            console.log('Not in database, retrieving similiar queries...');
-            hintElement.textContent = `Generating your answer may a minute or so. For an instant response, choose from the similar questions below. If you'd prefer to proceed with generating your answer, click "Generate My Original Question"`
-            similarQuestionsContainer.style.display = 'flex'
-            const similar_q = await get_sim(question);
-            similarQuestionsContainer.innerHTML = '';
-            exampleQuestions.classList.add('hidden');
-            similar_q.forEach((similarQuestion, index) => {
-                const button = document.createElement('button');
-                button.textContent = similarQuestion[1];
-                button.addEventListener('click', () => {
-                    document.getElementById('question').value = similarQuestion[1];
-                    document.getElementById('submit').click();
-                });
-                similarQuestionsContainer.appendChild(button);
-            });
-
-            const currentQuestionButton = document.createElement('button');
-            if (similar_q.length == 0) {
-                currentQuestionButton.textContent = 'We did not find any similar questions. To generate an answer, please click this button. This may take a minute.';
-            } else {
-                currentQuestionButton.textContent = 'Generate an answer to my original question. This may take a minute.';
-
-            }
-
-            currentQuestionButton.addEventListener('click', async () => {
-                try {
-                    resultsElement.style.display = 'flex'
-                    similarQuestionsContainer.style.display = 'none'
-                    hintElement.textContent = ''
-                    answerElement.innerHTML = `<textarea readonly placeholder="Answer will load here, please wait. This may take a minute. Please do not close or refresh this page...."></textarea>`;
-                    referencesElement.innerHTML = `<label for="references" class="visually-hidden">References will appear here...</label><textarea id="references" readonly placeholder="References will appear here..."></textarea>`;
-                    const checkValid = await check_valid(question);
-                    const checkValidResponse = checkValid["response"];
-                    console.log("Check valid response: " + checkValidResponse);
-                    if (checkValidResponse != "good") {
-                        answerElement.innerText = checkValidResponse;
-                        return;
-                    }
-                    const result = await runGeneration(question)
-                    const answer = result.end_output;
-                    resultsElement.style.display = 'flex';
-                    similarQuestionsContainer.style.display = 'none';
-                    appendChatMessage('assistant', answer, formatReferences(answer));
-                    answerElement.innerHTML = formatText(answer);
-                    referencesElement.innerHTML = formatReferences(answer);
-                    localStorage.setItem('rawOutput', answer);
-                    hintElement.textContent = '';
-                    generatePdfButton.classList.remove("hidden");
-                    exampleQuestions.classList.add('hidden');
-
-                } catch (err) {
-                    console.log(err)
-                    answerElement.innerHTML = '<textarea readonly placeholder="Error generating the answer. Please try again."></textarea>';
-                }
-            });
-            similarQuestionsContainer.appendChild(currentQuestionButton);
-            
-        } finally {
-            console.log("done");
-        }
-    } else {
-        answerElement.innerHTML = '<textarea readonly placeholder="Please enter a question."></textarea>';
+        const result = await runGeneration(question, pending);
+        pending.remove();
+        showAssistantAnswer(result.end_output);
+    } catch (err) {
+        console.error(err);
+        pending.fail(`${err.message || 'Something went wrong.'} Please try again.`, () => generateAnswer(question));
+    } finally {
+        setComposerBusy(false);
     }
+}
+
+async function answerFromAttachment(question) {
+    const pending = appendPendingMessage();
+    pending.setStatus('Reading your attached file...');
+    setComposerBusy(true);
+    try {
+        const result = await runGeneration(question, pending);
+        pending.remove();
+        showAssistantAnswer(result.end_output);
+    } catch (err) {
+        console.error(err);
+        pending.fail(`${err.message || 'Something went wrong.'} Please try again.`, () => answerFromAttachment(question));
+    } finally {
+        setComposerBusy(false);
+    }
+}
+
+function offerSimilarQuestions(question, similar) {
+    const container = document.getElementById('similarQuestions');
+    const hintElement = document.querySelector('.hint');
+    container.replaceChildren();
+    hintElement.textContent = 'A new answer takes about a minute. For an instant answer, pick a similar question that has already been answered.';
+    similar.forEach((item) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = item[1];
+        button.addEventListener('click', () => {
+            container.style.display = 'none';
+            hintElement.textContent = '';
+            document.getElementById('question').value = item[1];
+            document.getElementById('submit').click();
+        });
+        container.appendChild(button);
+    });
+    const original = document.createElement('button');
+    original.type = 'button';
+    original.className = 'generate-original';
+    original.textContent = similar.length
+        ? 'Answer my original question (about a minute)'
+        : 'No similar questions found. Answer my question (about a minute)';
+    original.addEventListener('click', () => {
+        container.style.display = 'none';
+        hintElement.textContent = '';
+        generateAnswer(question);
+    });
+    container.appendChild(original);
+    container.style.display = 'flex';
+}
+
+document.getElementById('submit').addEventListener('click', async () => {
+    const input = document.getElementById('question');
+    const question = input.value.trim();
+    const similarQuestionsContainer = document.getElementById('similarQuestions');
+    const hintElement = document.querySelector('.hint');
+    if (questionInFlight) return;
+    if (!question) {
+        hintElement.textContent = 'Please type a question first.';
+        return;
+    }
+    document.getElementById('generate-pdf-button').classList.add('hidden');
+    document.getElementById('example-questions')?.classList.add('hidden');
+    similarQuestionsContainer.style.display = 'none';
+    hintElement.textContent = '';
+    appendChatMessage('user', question);
+    input.value = '';
+
+    if (attachmentExists) {
+        await answerFromAttachment(question);
+        return;
+    }
+
+    setComposerBusy(true);
+    let cachedAnswer = null;
+    try {
+        cachedAnswer = await getAnswer(question);
+    } catch (err) {
+        cachedAnswer = null;
+    } finally {
+        setComposerBusy(false);
+    }
+    if (cachedAnswer) {
+        showAssistantAnswer(cachedAnswer);
+        return;
+    }
+
+    // Follow-ups inside a conversation go straight to generation so the
+    // earlier turns are used to understand the question.
+    if (conversationHasTurns()) {
+        await generateAnswer(question);
+        return;
+    }
+    let similar = [];
+    try {
+        similar = await get_sim(question);
+    } catch (err) {
+        similar = [];
+    }
+    offerSimilarQuestions(question, similar || []);
 });
 
 
@@ -858,18 +859,16 @@ document.getElementById('new-conversation').addEventListener('click', () => {
     document.getElementById('conversation-select').value = '';
     document.getElementById('question').value = '';
     document.getElementById('chat-thread').innerHTML = '<div class="welcome-message"><span class="assistant-avatar">D</span><div><h2>Start a new conversation</h2><p>Ask a diet or nutrition question to begin.</p></div></div>';
-    document.getElementById('results').style.display = 'none';
     document.getElementById('similarQuestions').style.display = 'none';
+    document.getElementById('generate-pdf-button').classList.add('hidden');
     document.querySelector('.hint').textContent = '';
 });
 
 document.getElementById('delete-conversation').addEventListener('click', async () => {
     const conversationId = getConversationId();
     if (!conversationId) return;
-    const response = await fetch(
-        `${baseURL}/conversations/${encodeURIComponent(conversationId)}?email=${encodeURIComponent(getUserEmail())}`,
-        {method: 'DELETE'},
-    );
+    if (!window.confirm('Delete this conversation? This cannot be undone.')) return;
+    const response = await apiFetch(`/conversations/${encodeURIComponent(conversationId)}`, {method: 'DELETE'});
     if (!response.ok) {
         console.error('Failed to delete conversation');
         return;

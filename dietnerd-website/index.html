@@ -9,16 +9,38 @@
 </head>
 <body>
     <script>
-        if (!sessionStorage.getItem('dietnerd_user')) {
-            window.location.href = 'login.html';
-        }
+        // Hide the app until the server confirms the session (see auth check below).
+        document.documentElement.classList.add('auth-pending');
     </script>
     <div class="toolbar">
         <a href="index.html">Home</a>
         <a href="about.html">About</a>
         <a href="contact.html">Contact</a>
-        <a href="#" id="logout-link">Logout</a>
+        <div class="account-menu">
+            <button type="button" id="account-button" aria-haspopup="true" aria-expanded="false"><span id="account-email">Account</span></button>
+            <div id="account-dropdown" class="account-dropdown" hidden>
+                <button type="button" id="change-password-link">Change password</button>
+                <button type="button" id="logout-link">Sign out</button>
+            </div>
+        </div>
     </div>
+    <dialog id="change-password-dialog" class="settings-dialog">
+        <form id="change-password-form" method="dialog" novalidate>
+            <h2>Change password</h2>
+            <label for="current-password">Current password</label>
+            <input type="password" id="current-password" autocomplete="current-password" required>
+            <label for="new-password">New password</label>
+            <input type="password" id="new-password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" required>
+            <label for="confirm-new-password">Confirm new password</label>
+            <input type="password" id="confirm-new-password" autocomplete="new-password" required>
+            <p id="change-password-error" class="dialog-error" role="alert"></p>
+            <p id="change-password-success" class="dialog-success" role="status"></p>
+            <div class="dialog-actions">
+                <button type="button" id="change-password-cancel" class="secondary-button">Close</button>
+                <button type="submit" id="change-password-save" class="primary-button">Save password</button>
+            </div>
+        </form>
+    </dialog>
     <!-- <div id="ownership">
         <p>Professor Dennis Shasha @ New York University</p>
         <p>Shela Wu @ New York University</p>
@@ -62,7 +84,7 @@
                 <div class="sidebar-note"><strong>DietNerd</strong><span>Research answers grounded in published evidence.</span></div>
             </aside>
             <section class="chat-panel" aria-labelledby="chat-title">
-                <header class="chat-header"><div><span class="status-dot"></span><strong id="chat-title">DietNerd assistant</strong></div><span>Evidence-focused</span></header>
+                <header class="chat-header"><div><span class="status-dot"></span><strong id="chat-title">DietNerd assistant</strong></div><div class="header-actions"><span>Evidence-focused</span><button id="generate-pdf-button" class="hidden header-button">Download answer</button></div></header>
                 <div id="chat-thread" class="chat-thread" role="log" aria-live="off" aria-relevant="additions">
                     <div class="welcome-message">
                         <span class="assistant-avatar">D</span>
@@ -75,7 +97,7 @@
                 <div class="composer-wrap">
                     <div id="existing-attachments" class="existing-attachments"></div>
                     <div class="composer">
-                        <input type="file" id="attachment-file" accept=".pdf,.txt,.csv,.json" class="visually-hidden">
+                        <input type="file" id="attachment-file" accept=".pdf,.txt,.csv" class="visually-hidden">
                         <button type="button" id="attach-button" onclick="document.getElementById('attachment-file').click()" aria-label="Attach a file">＋</button>
                         <label for="question" class="visually-hidden">Message DietNerd</label>
                         <textarea id="question" rows="1" placeholder="Message DietNerd..."></textarea>
@@ -83,8 +105,6 @@
                     </div>
                     <div class="composer-meta"><span id="attachment-label">No file attached</span><span>DietNerd can make mistakes. Check important health information.</span></div>
                 </div>
-                <div id="results" class="hidden"><div id="output"></div><div id="references"></div></div>
-                <div class="button-container"><button id="generate-pdf-button" class="hidden">Download answer</button></div>
             </section>
             <aside id="sources-panel" class="sources-panel" aria-labelledby="sources-title" aria-hidden="true">
                 <header class="sources-panel-header"><div><span class="sources-kicker">Evidence library</span><h2 id="sources-title">Sources</h2></div><button type="button" id="close-sources" class="close-sources" aria-label="Close sources">×</button></header>
@@ -95,14 +115,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="env.js"></script>
+    <script src="api.js"></script>
     <script src="index.js"></script>
-    <script>
-        document.getElementById('logout-link').addEventListener('click', function(e) {
-            e.preventDefault();
-            sessionStorage.removeItem('dietnerd_user');
-            sessionStorage.removeItem('dietnerd_conversation_id');
-            window.location.href = 'login.html';
-        });
-    </script>
+    <script src="account.js"></script>
 </body>
 </html>
