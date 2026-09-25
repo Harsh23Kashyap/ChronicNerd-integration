@@ -794,9 +794,11 @@ def _run_research_with_key(user_query, request_id, email, conversation_id, token
     scope = byok.activate(token_hash, email) if token_hash else None
     try:
         return process_user_query(user_query, request_id, email, conversation_id)
-    except Exception:
-        # Do not echo provider exceptions: SDK errors may reflect request headers.
-        logging.error("Research request failed (details suppressed)")
+    except Exception as exc:
+        # Log only the exception class and numeric provider status. Exception
+        # messages may echo request headers or other sensitive content.
+        status = getattr(exc, "status_code", None)
+        logging.error("Research request failed: %s (status=%s)", type(exc).__name__, status if isinstance(status, int) else "n/a")
         loop.run_until_complete(send_update(request_id, {"end_output": "Research could not finish. Please try again.", "relevant_articles": [], "citations_obj": {}, "citations": []}))
     finally:
         if scope is not None:
