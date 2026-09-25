@@ -26,6 +26,7 @@
         <div class="account-menu">
             <button type="button" id="account-button" aria-haspopup="true" aria-expanded="false"><span id="account-email">Account</span></button><span id="session-countdown" role="status" aria-live="off" title="Time until automatic sign-out" hidden></span>
             <div id="account-dropdown" class="account-dropdown" hidden>
+                <button type="button" id="diet-profile-link">Diet profile</button>
                 <button type="button" id="change-password-link">Change password</button>
                 <button type="button" id="logout-link">Sign out</button>
             </div>
@@ -92,6 +93,7 @@
                 <p class="hint" role="status" aria-live="polite"></p>
                 <div class="similar-questions" id="similarQuestions"></div>
                 <div class="composer-wrap">
+                    <div id="paper-chip-row" class="paper-chip-row" hidden><span id="paper-chip-text"></span><a id="paper-chip-link" target="_blank" rel="noopener noreferrer" hidden>Open paper</a><button type="button" id="paper-clear" aria-label="Remove paper">×</button></div>
                     <div id="existing-attachments" class="existing-attachments"></div>
                     <div class="composer">
                         <input type="file" id="attachment-file" accept=".pdf,.txt,.csv" class="visually-hidden">
@@ -100,7 +102,7 @@
                         <textarea id="question" rows="1" placeholder="Message DietNerd..."></textarea>
                         <button id="submit" aria-label="Send message">↑</button>
                     </div>
-                    <div class="composer-meta"><span id="attachment-label">No file attached</span><span>DietNerd can make mistakes. Check important health information.</span></div>
+                    <div class="composer-meta"><div class="composer-tools"><span id="attachment-label">No file attached</span><button type="button" id="paper-button" class="paper-button">Ask about a paper</button></div><span>DietNerd can make mistakes. Check important health information.</span></div>
                 </div>
             </section>
             <aside id="sources-panel" class="sources-panel" aria-labelledby="sources-title" aria-hidden="true">
@@ -109,6 +111,36 @@
             </aside>
         </main>
     </div>
+    <dialog id="paper-dialog" class="paper-dialog" aria-labelledby="paper-dialog-title">
+        <h2 id="paper-dialog-title">Ask about a paper</h2>
+        <p>Paste a PubMed link or PMID, or select a PDF. Questions use this paper until you remove it. The PDF stays selected in this browser session and is not saved as an account document.</p>
+        <input type="text" id="paper-input" placeholder="https://pubmed.ncbi.nlm.nih.gov/12345678/ or 12345678" autocomplete="off">
+        <label for="paper-pdf">Or choose a PDF paper (up to 5 MB)</label><input type="file" id="paper-pdf" accept=".pdf,application/pdf">
+        <p id="paper-dialog-error" role="alert" hidden></p>
+        <div class="paper-dialog-actions"><button type="button" id="paper-cancel">Cancel</button><button type="button" id="paper-load" class="primary-button">Use this paper</button></div>
+    </dialog>
+    <dialog id="profile-dialog" class="settings-dialog">
+        <form id="profile-form" method="dialog" novalidate>
+            <h2>Diet profile</h2>
+            <p class="profile-note">Optional. Saved to your account and used to personalize answers. It is not medical advice, and you can clear it at any time.</p>
+            <label for="profile-age">Age range</label>
+            <select id="profile-age">
+                <option value="">Prefer not to say</option>
+                <option>18-24</option><option>25-34</option><option>35-44</option><option>45-54</option><option>55-64</option><option>65+</option>
+            </select>
+            <label for="profile-goals">Goals</label>
+            <input type="text" id="profile-goals" maxlength="300" placeholder="e.g. lose weight, build muscle, more energy">
+            <label for="profile-conditions">Conditions</label>
+            <input type="text" id="profile-conditions" maxlength="300" placeholder="e.g. PCOS, prediabetes, none">
+            <p id="profile-error" class="dialog-error" role="alert"></p>
+            <p id="profile-success" class="dialog-success" role="status"></p>
+            <div class="dialog-actions">
+                <button type="button" id="profile-clear" class="secondary-button">Clear profile</button>
+                <button type="button" id="profile-cancel" class="secondary-button">Close</button>
+                <button type="submit" id="profile-save" class="primary-button">Save profile</button>
+            </div>
+        </form>
+    </dialog>
     <dialog id="delete-conversation-dialog" class="delete-dialog" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-description">
         <div class="delete-dialog-icon" aria-hidden="true"><span class="delete-dialog-lid"></span><span class="delete-dialog-bin">×</span></div>
         <h2 id="delete-dialog-title">Delete this conversation?</h2>

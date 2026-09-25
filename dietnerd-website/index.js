@@ -19,6 +19,13 @@ function emptyStateMarkup(temporary = false) {
     return `<div class="welcome-message"><span class="assistant-avatar" aria-label="DietNerd"><img src="assets/dietnerd_mark.svg" alt=""></span><div><h2>${heading}</h2><p>${intro}</p><div id="example-questions" class="starter-questions" aria-label="Example questions">${buttons}</div></div></div>`;
 }
 
+function clearPaperScope() {
+    paperContext = null;
+    document.getElementById('paper-pdf').value = '';
+    document.getElementById('paper-chip-row').hidden = true;
+    document.getElementById('paper-chip-link').hidden = true;
+}
+
 function clearChatThread() {
     document.getElementById('chat-thread').innerHTML = '';
 }
@@ -224,13 +231,26 @@ async function refreshConversationList() {
         option.value = conversation.conversation_id;
         option.textContent = conversation.title || 'Untitled conversation';
         select.appendChild(option);
+        const item = document.createElement('div');
+        item.className = 'conversation-item';
         const row = document.createElement('button');
         row.type = 'button';
         row.className = 'conversation-row';
         row.dataset.conversationId = conversation.conversation_id;
         row.title = conversation.title || 'Untitled conversation';
         row.textContent = conversation.title || 'Untitled conversation';
-        list.appendChild(row);
+        const rename = document.createElement('button');
+        rename.type = 'button';
+        rename.className = 'rename-button';
+        rename.title = 'Rename conversation';
+        rename.setAttribute('aria-label', `Rename ${conversation.title || 'Untitled conversation'}`);
+        rename.textContent = '\u270e';
+        rename.addEventListener('click', (event) => {
+            event.stopPropagation();
+            beginRename(item, conversation);
+        });
+        item.append(row, rename);
+        list.appendChild(item);
     });
     const selectedId = (data.conversations || []).some(c => c.conversation_id === currentId) ? currentId : '';
     select.value = selectedId;
@@ -957,8 +977,10 @@ function setComposerBusy(busy) {
 
 async function runGeneration(userQuery, pending) {
     const isTemporary = temporaryChat;
-    const file = isTemporary ? temporaryFile : null;
+    const paperFile = paperContext?.file || null;
+    const file = paperFile || (isTemporary ? temporaryFile : null);
     const payload = { user_query: userQuery, conversation_id: getConversationId(), temporary: isTemporary, temporary_history: isTemporary ? temporaryTurns.slice(-8) : [] };
+    if (paperContext?.pmid) payload.paper_pmid = paperContext.pmid;
     if (file) {
         const bytes = new Uint8Array(await file.arrayBuffer());
         let binary = '';
@@ -966,7 +988,8 @@ async function runGeneration(userQuery, pending) {
         payload.attachment_filename = file.name;
         payload.attachment_base64 = btoa(binary);
     }
-    const response = await apiFetch(file ? '/process_query/temporary_attachment' : '/process_query', {
+    const endpoint = paperFile ? '/process_query/paper_pdf' : file ? '/process_query/temporary_attachment' : '/process_query';
+    const response = await apiFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -1145,6 +1168,11 @@ document.getElementById('submit').addEventListener('click', async () => {
     appendChatMessage('user', question);
     input.value = '';
 
+    if (paperContext) {
+        await generateAnswer(question);
+        return;
+    }
+
     if (attachmentExists && !temporaryChat) {
         await answerFromAttachment(question);
         return;
@@ -1217,6 +1245,7 @@ document.getElementById('conversation-select').addEventListener('change', async 
         return;
     }
     temporaryChat = false;
+    clearPaperScope();
     document.body.classList.remove('temporary-mode');
     temporaryTurns = [];
     temporaryFile = null;
@@ -1244,6 +1273,7 @@ document.getElementById('temporary-chat').addEventListener('click', () => {
     if (questionInFlight) return;
     document.getElementById('new-conversation').click();
     temporaryChat = true;
+    clearPaperScope();
     document.body.classList.add('temporary-mode');
     temporaryTurns = [];
     temporaryFile = null;
@@ -1266,6 +1296,7 @@ document.getElementById('new-conversation').addEventListener('click', () => {
     document.getElementById('existing-attachments').hidden = false;
     document.getElementById('attachment-label').textContent = attachmentExists ? '' : 'No file attached';
     temporaryChat = false;
+    clearPaperScope();
     document.body.classList.remove('temporary-mode');
     temporaryTurns = [];
     temporaryFile = null;
@@ -1445,3 +1476,155 @@ if (getConversationId()) enterConversationMode();
     if (document.documentElement.classList.contains('auth-pending')) ready.observe(document.documentElement,{attributes:true,attributeFilter:['class']});
     else show();
 })();
+
+// Ask-about-a-paper: scope the chat to one PubMed paper's abstract.
+let paperContext = null;
+(() => {
+    const dialog = document.getElementById('paper-dialog');
+    const input = document.getElementById('paper-input');
+    const error = document.getElementById('paper-dialog-error');
+    const load = document.getElementById('paper-load');
+    const pdfInput = document.getElementById('paper-pdf');
+    document.getElementById('paper-button').addEventListener('click', () => {
+        error.hidden = true;
+        input.value = '';
+        pdfInput.value = '';
+        dialog.showModal();
+        input.focus();
+    });
+    document.getElementById('paper-cancel').addEventListener('click', () => dialog.close());
+    document.getElementById('paper-clear').addEventListener('click', clearPaperScope);
+    pdfInput.addEventListener('change', () => {
+        const file = pdfInput.files?.[0];
+        if (!file) return;
+        if (!/\.pdf$/i.test(file.name) || !file.size || file.size > 5 * 1024 * 1024) {
+            error.textContent = 'Choose a PDF file up to 5 MB.';
+            error.hidden = false;
+            pdfInput.value = '';
+            return;
+        }
+        error.hidden = true;
+        input.value = '';
+        paperContext = { file };
+        document.getElementById('paper-chip-text').textContent = `Asking about PDF: ${file.name}`;
+        document.getElementById('paper-chip-link').hidden = true;
+        document.getElementById('paper-chip-row').hidden = false;
+        dialog.close();
+    });
+    input.addEventListener('input', () => { error.hidden = true; });
+    input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); load.click(); } });
+    load.addEventListener('click', async () => {
+        const raw = input.value.trim();
+        const match = raw.match(/^https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/(\d{1,12})\/?(?:\?[^#]*)?$/i) || raw.match(/^(\d{1,12})$/);
+        if (!match) { error.textContent = 'Enter a PubMed link or PMID.'; error.hidden = false; return; }
+        load.disabled = true; load.textContent = 'Loading...';
+        try {
+            const response = await apiFetch(`/paper_context/${match[1]}`);
+            if (!response.ok) throw new Error(await DietNerdAPI.readError(response, 'Could not load that paper.'));
+            const paper = await response.json();
+            paperContext = { pmid: paper.pmid, title: paper.title, abstract: paper.abstract, url: paper.url };
+            document.getElementById('paper-chip-text').textContent = `Asking about: ${paper.title} (PMID ${paper.pmid})`;
+            const paperLink = document.getElementById('paper-chip-link');
+            paperLink.href = `https://pubmed.ncbi.nlm.nih.gov/${paper.pmid}/`;
+            paperLink.hidden = false;
+            document.getElementById('paper-chip-row').hidden = false;
+            dialog.close();
+        } catch (err) {
+            error.textContent = err.message || 'Could not load that paper.';
+            error.hidden = false;
+        } finally {
+            load.disabled = false; load.textContent = 'Use this paper';
+        }
+    });
+})();
+
+// Diet profile: optional account-level personalization.
+(() => {
+    const dialog = document.getElementById('profile-dialog');
+    const form = document.getElementById('profile-form');
+    const age = document.getElementById('profile-age');
+    const goals = document.getElementById('profile-goals');
+    const conditions = document.getElementById('profile-conditions');
+    const error = document.getElementById('profile-error');
+    const success = document.getElementById('profile-success');
+    async function loadProfile() {
+        error.textContent = ''; success.textContent = '';
+        try {
+            const response = await apiFetch('/profile');
+            if (!response.ok) throw new Error(await DietNerdAPI.readError(response, 'Could not load the profile.'));
+            const profile = await response.json();
+            age.value = profile.age_range || '';
+            goals.value = profile.goals || '';
+            conditions.value = profile.conditions || '';
+        } catch (err) { error.textContent = err.message; }
+    }
+    async function saveProfile(payload, doneMessage) {
+        error.textContent = ''; success.textContent = '';
+        try {
+            const response = await apiFetch('/profile', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+            if (!response.ok) throw new Error(await DietNerdAPI.readError(response, 'Could not save the profile.'));
+            success.textContent = doneMessage;
+            return true;
+        } catch (err) { error.textContent = err.message; return false; }
+    }
+    document.getElementById('diet-profile-link').addEventListener('click', () => {
+        document.getElementById('account-dropdown').hidden = true;
+        document.getElementById('account-button').setAttribute('aria-expanded', 'false');
+        dialog.showModal();
+        loadProfile();
+    });
+    document.getElementById('profile-cancel').addEventListener('click', () => dialog.close());
+    document.getElementById('profile-clear').addEventListener('click', async () => {
+        if (await saveProfile({age_range: '', goals: '', conditions: ''}, 'Profile cleared.')) {
+            age.value = ''; goals.value = ''; conditions.value = '';
+        }
+    });
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        await saveProfile({age_range: age.value, goals: goals.value.trim(), conditions: conditions.value.trim()}, 'Profile saved.');
+    });
+})();
+
+// Rename a saved conversation inline.
+function beginRename(item, conversation) {
+    const input = document.createElement('input');
+    input.className = 'rename-input';
+    input.value = conversation.title || '';
+    input.maxLength = 120;
+    input.setAttribute('aria-label', 'Conversation name');
+    item.replaceChildren(input);
+    input.focus();
+    input.select();
+    let done = false;
+    const cancel = () => { if (!done) { done = true; refreshConversationList(); } };
+    const save = async () => {
+        if (done) return;
+        const title = input.value.trim();
+        if (!title || title === (conversation.title || '')) { cancel(); return; }
+        done = true;
+        input.disabled = true;
+        try {
+            const response = await apiFetch(`/conversations/${conversation.conversation_id}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({title}),
+            });
+            if (!response.ok) throw new Error(await DietNerdAPI.readError(response, 'Could not rename the conversation.'));
+            if (getConversationId() === conversation.conversation_id) {
+                document.getElementById('chat-title').textContent = title;
+            }
+            await refreshConversationList();
+        } catch (err) {
+            done = false;
+            input.disabled = false;
+            input.classList.add('rename-error');
+            input.title = err.message;
+            input.focus();
+        }
+    };
+    input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') { event.preventDefault(); save(); }
+        if (event.key === 'Escape') { event.preventDefault(); cancel(); }
+    });
+    input.addEventListener('blur', save);
+}

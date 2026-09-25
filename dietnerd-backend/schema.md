@@ -24,6 +24,7 @@ and retains the old summary table as a backup for verification.
 | `email` | VARCHAR(255) | Owner, FK to `users.email` |
 | `title` | VARCHAR(255) | Initial question, truncated to 120 characters |
 | `next_query_number` | INT | Next turn number, allocated under a row lock |
+| `title_locked` | TINYINT(1) | User rename prevents automatic title updates |
 | `created_at` | TIMESTAMP | Creation time |
 | `updated_at` | TIMESTAMP | Last turn/update time |
 
@@ -84,3 +85,26 @@ unique key `(email, filename)` makes re-upload replace the prior content.
 
 The P0 model still accepts caller-supplied email as identity. P1 must replace
 that with authenticated server-side identity before deployment.
+
+## `user_profiles`
+
+One optional row per user: the self-reported diet profile used to personalize answers.
+
+| Column | Type | Notes |
+|---|---|---|
+| `email` | VARCHAR(255) | Primary key, FK to `users.email` |
+| `age_range` | VARCHAR(40) | One of a fixed list, or empty |
+| `goals` | VARCHAR(300) | Free text, or empty |
+| `conditions` | VARCHAR(300) | Free text, or empty |
+| `updated_at` | TIMESTAMP | Last save |
+
+All three content fields empty deletes the row (Clear profile). Existing
+databases apply `migrations/002_diet_profile.sql`; fresh databases create the
+table at startup.
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/profile` | GET | Read the caller's profile (empty strings when unset) |
+| `/profile` | PUT | Save or clear the caller's profile |
+
+Existing databases apply `migrations/003_conversation_rename.sql` before deploying the rename API. Fresh databases get `title_locked` on startup.

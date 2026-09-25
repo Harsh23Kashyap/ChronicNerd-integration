@@ -27,7 +27,7 @@ class TemporaryModeTest(unittest.TestCase):
         with patch.dict('os.environ', {'OPENAI_API_KEY':'test-only'}),patch.object(main,'_run_research_with_key') as run:
             response=self.client.post('/process_query',json={'user_query':'And sleep?', 'temporary':True,'temporary_history':turns})
         self.assertEqual(response.status_code,200,response.text)
-        self.assertEqual(run.call_args.args[-1], [{'raw_question':'What about fiber?', 'standalone_question':'What about fiber?', 'answer':'First answer'}])
+        self.assertEqual(run.call_args.args[4], [{'raw_question':'What about fiber?', 'standalone_question':'What about fiber?', 'answer':'First answer'}])
         with main.request_event_lock:
             rid=response.json()['request_id']
             for table in (main.request_events,main.request_event_base,main.request_updated_at,main.request_created_at,main.request_owners): table.pop(rid,None)
@@ -63,7 +63,7 @@ class TemporaryAttachmentTest(unittest.TestCase):
             r = self.client.post('/process_query/temporary_attachment', json=self.payload())
         self.assertEqual(r.status_code, 200, r.text)
         self.assertIsNone(r.json()['conversation_id'])
-        self.assertIn('Fiber appears in oats.', run.call_args.args[-1])
+        self.assertIn('Fiber appears in oats.', run.call_args.args[5])
         db.assert_not_called()
         rid = r.json()['request_id']
         with main.request_event_lock:

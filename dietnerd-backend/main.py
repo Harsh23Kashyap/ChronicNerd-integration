@@ -5,6 +5,7 @@ import auth
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Query, UploadFile, File, Form, Depends, Request, Response
 from fastapi.responses import StreamingResponse
 from starlette.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 import asyncio
 from sse_starlette.sse import EventSourceResponse
@@ -60,7 +61,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
@@ -82,6 +83,7 @@ def create_tables():
                 email VARCHAR(255) NOT NULL,
                 title VARCHAR(255),
                 next_query_number INT NOT NULL DEFAULT 1,
+                title_locked TINYINT(1) NOT NULL DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX idx_conversations_email (email),
@@ -142,6 +144,16 @@ def create_tables():
             )
         """)
         cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_profiles (
+                email VARCHAR(255) PRIMARY KEY,
+                age_range VARCHAR(40) NOT NULL DEFAULT '',
+                goals VARCHAR(300) NOT NULL DEFAULT '',
+                conditions VARCHAR(300) NOT NULL DEFAULT '',
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (email) REFERENCES users(email) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS password_resets (
                 token_hash CHAR(64) PRIMARY KEY,
                 email VARCHAR(255) NOT NULL,
@@ -185,6 +197,7 @@ class QueryModel(BaseModel):
     temporary_history: Optional[List[Dict[str, str]]] = None
     attachment_filename: Optional[str] = None
     attachment_base64: Optional[str] = None
+    paper_pmid: Optional[str] = None
 
 class AuthModel(BaseModel):
     email: str
@@ -603,9 +616,62 @@ async def read_article_analysis(pmid: str, email: str = Depends(current_user)):
             "citation": article.get("citation") or "", "summary": article.get("summary") or "",
             "url": article.get("url") if str(article.get("url", "")).startswith("https://") else ""}
 
+def fetch_paper_record(pmid: str):
+    if not isinstance(pmid, str) or not pmid.isascii() or not pmid.isdigit() or len(pmid) > 12:
+        raise HTTPException(status_code=404, detail="Paper not found.")
+    try:
+        Entrez.email = os.getenv('ENTREZ_EMAIL')
+        Entrez.api_key = os.getenv('NCBI_API_KEY') or None
+        handle = exponential_backoff(Entrez.efetch, db="pubmed", id=pmid, rettype="xml")
+        try:
+            records = Entrez.read(handle)["PubmedArticle"]
+        finally:
+            if handle is not None:
+                handle.close()
+        if not records:
+            raise HTTPException(status_code=404, detail="Paper not found.")
+        article = records[0]["MedlineCitation"]["Article"]
+        title = str(article.get("ArticleTitle") or "").strip()
+        abstract_parts = article.get("Abstract", {}).get("AbstractText", [])
+        abstract = "\n".join(str(part) for part in abstract_parts).strip()
+        if not title or not abstract:
+            raise HTTPException(status_code=404, detail="This paper has no available abstract.")
+        return {"pmid": pmid, "title": title[:500], "abstract": abstract[:20000],
+                "url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail="Could not reach PubMed. Please try again.")
+
+@app.get("/paper_context/{pmid}")
+async def read_paper_context(pmid: str, email: str = Depends(current_user)):
+    return await run_in_threadpool(fetch_paper_record, pmid)
+
 @app.post("/conversations")
 async def new_conversation(email: str = Depends(current_user)):
     return {"conversation_id": create_conversation(email)}
+
+class RenameModel(BaseModel):
+    title: str
+
+@app.put("/conversations/{conversation_id}")
+async def rename_conversation(conversation_id: str, body: RenameModel, email: str = Depends(current_user)):
+    title = body.title.strip()
+    if not title or len(title) > 120 or any(ord(c) < 32 for c in title):
+        raise HTTPException(status_code=400, detail="Enter a name up to 120 characters.")
+    if not conversation_belongs_to(email, conversation_id):
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute(
+            "UPDATE conversations SET title = %s, title_locked = 1 WHERE email = %s AND conversation_id = %s",
+            (title, email, conversation_id),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    return {"conversation_id": conversation_id, "title": title}
 
 @app.get("/conversations")
 async def list_conversations(email: str = Depends(current_user)):
@@ -704,6 +770,77 @@ async def remove_attachment(filename: str = Query(...), email: str = Depends(cur
         connection.close()
     return JSONResponse({"status": "ok"})
 
+ALLOWED_AGE_RANGES = {'18-24', '25-34', '35-44', '45-54', '55-64', '65+'}
+
+class ProfileModel(BaseModel):
+    age_range: Optional[str] = None
+    goals: Optional[str] = None
+    conditions: Optional[str] = None
+
+def read_diet_profile(email):
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT age_range, goals, conditions FROM user_profiles WHERE email = %s", (email,))
+        row = cursor.fetchone()
+    finally:
+        connection.close()
+    if not row:
+        return None
+    return {"age_range": row[0] or "", "goals": row[1] or "", "conditions": row[2] or ""}
+
+def get_diet_profile_prompt(email):
+    try:
+        profile = read_diet_profile(email)
+    except Exception:
+        logging.warning("Diet profile lookup failed: continuing without it")
+        return ""
+    if not profile:
+        return ""
+    parts = []
+    if profile["age_range"]:
+        parts.append(f"age range {profile['age_range']}")
+    if profile["goals"]:
+        parts.append(f"goals: {profile['goals']}")
+    if profile["conditions"]:
+        parts.append(f"conditions: {profile['conditions']}")
+    if not parts:
+        return ""
+    return ("The person asking self-reported the following: " + "; ".join(parts) +
+            ". Use this only to personalize general guidance; it is not a diagnosis or medical record, and do not repeat it back unless it is relevant.")
+
+@app.get("/profile")
+async def get_profile(email: str = Depends(current_user)):
+    profile = read_diet_profile(email) or {}
+    return {"age_range": profile.get("age_range") or "", "goals": profile.get("goals") or "",
+            "conditions": profile.get("conditions") or ""}
+
+@app.put("/profile")
+async def put_profile(profile: ProfileModel, email: str = Depends(current_user)):
+    age_range = (profile.age_range or "").strip()
+    goals = (profile.goals or "").strip()
+    conditions = (profile.conditions or "").strip()
+    if age_range and age_range not in ALLOWED_AGE_RANGES:
+        raise HTTPException(status_code=400, detail="Choose an age range from the list.")
+    if len(goals) > 300 or len(conditions) > 300 or len(age_range) > 40:
+        raise HTTPException(status_code=400, detail="Profile fields are too long.")
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        if not age_range and not goals and not conditions:
+            cursor.execute("DELETE FROM user_profiles WHERE email = %s", (email,))
+        else:
+            cursor.execute(
+                "INSERT INTO user_profiles (email, age_range, goals, conditions) VALUES (%s, %s, %s, %s) "
+                "ON DUPLICATE KEY UPDATE age_range = VALUES(age_range), goals = VALUES(goals), conditions = VALUES(conditions)",
+                (email, age_range, goals, conditions),
+            )
+        connection.commit()
+    finally:
+        connection.close()
+    return {"age_range": age_range, "goals": goals, "conditions": conditions}
+
+
 @app.post("/process_query/temporary_attachment")
 async def process_temporary_attachment(background_tasks: BackgroundTasks, request: Request, email: str = Depends(current_user)):
     body = bytearray()
@@ -713,7 +850,7 @@ async def process_temporary_attachment(background_tasks: BackgroundTasks, reques
         if len(body) > max_body:
             raise HTTPException(status_code=413, detail="Temporary file is too large.")
     try:
-        query = QueryModel.parse_raw(bytes(body))
+        query = QueryModel.model_validate_json(bytes(body))
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid temporary request.")
     if not query.temporary or query.conversation_id or not query.attachment_filename or not query.attachment_base64:
@@ -736,6 +873,40 @@ async def process_temporary_attachment(background_tasks: BackgroundTasks, reques
         raise HTTPException(status_code=413, detail="Extracted text is too long for temporary chat.")
     return await _start_query(background_tasks, query, email, f"Document: {filename}\n{text}")
 
+@app.post("/process_query/paper_pdf")
+async def process_paper_pdf(background_tasks: BackgroundTasks, request: Request, email: str = Depends(current_user)):
+    # Limit the body before decoding; do not store the selected PDF as an account document.
+    body = bytearray()
+    max_body = (MAX_UPLOAD_BYTES * 4 // 3) + 24000
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > max_body:
+            raise HTTPException(status_code=413, detail="Paper PDF is too large.")
+    try:
+        query = QueryModel.model_validate_json(bytes(body))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid paper request.")
+    filename = os.path.basename((query.attachment_filename or "").replace("\\", "/")).strip()
+    if not filename or len(filename) > 255 or not filename.lower().endswith('.pdf') or not query.attachment_base64:
+        raise HTTPException(status_code=400, detail="A PDF paper and question are required.")
+    if query.paper_pmid:
+        raise HTTPException(status_code=400, detail="Choose either a PubMed paper or a PDF paper.")
+    try:
+        file_bytes = base64.b64decode(query.attachment_base64, validate=True)
+    except (ValueError, binascii.Error):
+        raise HTTPException(status_code=400, detail="Invalid PDF data.")
+    if not file_bytes or len(file_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"PDF must be {MAX_UPLOAD_BYTES // (1024 * 1024)} MB or smaller.")
+    if not file_bytes.startswith(b'%PDF-'):
+        raise HTTPException(status_code=400, detail="The PDF file is invalid.")
+    text = extract_text_from_upload(file_bytes, filename).strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="No readable text was found in this PDF.")
+    if len(text) > 80000:
+        raise HTTPException(status_code=413, detail="Extracted PDF text is too long.")
+    return await _start_query(background_tasks, query, email,
+                              f"Selected paper PDF: {filename}\n{text}")
+
 @app.post("/process_query")
 async def process_query(background_tasks: BackgroundTasks, query: QueryModel, request: Request, email: str = Depends(current_user)):
     if query.attachment_filename is not None or query.attachment_base64 is not None:
@@ -744,6 +915,12 @@ async def process_query(background_tasks: BackgroundTasks, query: QueryModel, re
 
 async def _start_query(background_tasks, query, email, temporary_attachment_context=None):
     query.email = email
+    paper_context = None
+    if query.paper_pmid is not None:
+        pmid = query.paper_pmid
+        if not isinstance(pmid, str) or not pmid.isascii() or not pmid.isdigit() or len(pmid) > 12:
+            raise HTTPException(status_code=400, detail="Invalid paper reference.")
+        paper_context = await run_in_threadpool(fetch_paper_record, pmid)
     if not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(status_code=503, detail="Research is temporarily unavailable. Please try again later.")
     request_id = str(uuid.uuid4())
@@ -797,7 +974,7 @@ async def _start_query(background_tasks, query, email, temporary_attachment_cont
                 request_created_at.pop(request_id, None)
                 request_owners.pop(request_id, None)
             raise
-    background_tasks.add_task(_run_research_with_key, query.user_query, request_id, query.email, conversation_id, temporary_history, temporary_attachment_context)
+    background_tasks.add_task(_run_research_with_key, query.user_query, request_id, query.email, conversation_id, temporary_history, temporary_attachment_context, paper_context)
     return JSONResponse({"request_id": request_id, "conversation_id": conversation_id})
 
 def _prune_request_events():
@@ -875,9 +1052,9 @@ def get_user_documents(email: str):
     finally:
         connection.close()
 
-def _run_research_with_key(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None):
+def _run_research_with_key(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None, paper_context=None):
     try:
-        result = process_user_query(user_query, request_id, email, conversation_id, temporary_history, temporary_attachment_context)
+        result = process_user_query(user_query, request_id, email, conversation_id, temporary_history, temporary_attachment_context, paper_context)
         if conversation_id:
             logging.info("Conversation title job queued")
             scope_context = copy_context()
@@ -942,7 +1119,7 @@ def update_conversation_title(email: str, conversation_id: str):
             if cursor.fetchone():
                 title = f"{title[:70]} {conversation_id[:4]}"
             cursor.execute(
-                "UPDATE conversations SET title = %s WHERE email = %s AND conversation_id = %s AND next_query_number = %s",
+                "UPDATE conversations SET title = %s WHERE email = %s AND conversation_id = %s AND next_query_number = %s AND title_locked = 0",
                 (title, email, conversation_id, latest_turn + 1),
             )
             affected = cursor.rowcount
@@ -974,7 +1151,7 @@ def _send_article_titles(request_id: str, articles: list, stage: str):
         }))
 
 
-def process_user_query(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None):
+def process_user_query(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None, paper_context=None):
     session_memory = get_session_memory(email, conversation_id) if conversation_id else (temporary_history or [])
     raw_question = user_query
 
@@ -982,17 +1159,29 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
         user_query = generate_standalone_question(user_query, session_memory)
         if conversation_id: logging.info("[SESSION MEMORY] Standalone question generated")
 
-    user_attachment_context = temporary_attachment_context if not conversation_id else None
+    paper_text = None
+    if paper_context:
+        paper_text = ("The user is asking about this specific paper. Ground the answer in it, and say plainly when the paper does not address part of the question.\n"
+                      f"Paper: {paper_context['title']} (PMID {paper_context['pmid']}, {paper_context['url']})\nAbstract: {paper_context['abstract']}")
+    user_attachment_context = temporary_attachment_context
     attachment_exist = bool(user_attachment_context)
     attachment_based_answer = False
 
-    if conversation_id and check_attachment_exists(email):
+    if conversation_id and not temporary_attachment_context and check_attachment_exists(email):
         attachment_exist = True
         documents = get_user_documents(email)
         if documents:
             user_attachment_context = "\n\n".join(
                 f"Document: {name}\n{content}" for name, content in documents.items()
             )
+
+    if paper_text:
+        user_attachment_context = f"{user_attachment_context}\n\n{paper_text}" if user_attachment_context else paper_text
+        attachment_exist = True
+
+    profile_prompt = get_diet_profile_prompt(email)
+    if profile_prompt and user_attachment_context:
+        user_attachment_context += f"\n\nPersonalization context: {profile_prompt}"
 
     attachment_partial_answer = None
     partial_question = None
@@ -1031,7 +1220,6 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
                 logging.info("[ATTACHMENT] Sending unanswered portion to PubMed")
 
     pipeline_query = partial_question if attachment_partial_answer and partial_question else user_query
-
     # Query Generation
     start_poc = time.time()
     general_query, query_contention, query_list = query_generation(pipeline_query)
@@ -1082,7 +1270,7 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
 
     # Final Output
     start_output = time.time()
-    final_output = generate_final_response(all_relevant_articles, pipeline_query, None, original_articles=relevant_articles, recent_history=session_memory[-8:])
+    final_output = generate_final_response(all_relevant_articles, pipeline_query, profile_prompt or None, original_articles=relevant_articles, recent_history=session_memory[-8:])
     if attachment_partial_answer:
         final_output = attachment_partial_answer + "\n\n" + final_output
     end_output = time.time()

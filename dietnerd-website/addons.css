@@ -11,3 +11,9 @@
 @keyframes diagram-flow{to{stroke-dashoffset:-28}}
 @media(prefers-reduced-motion:reduce){.addon svg path{animation:none;stroke-dasharray:none;stroke-dashoffset:0}}
 .addon svg text{animation:none;opacity:1}
+
+.theme-toggle{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:6px 10px;font:600 11px system-ui,sans-serif;cursor:pointer;letter-spacing:0;text-transform:none}
+html[data-theme=dark]{--ink:#eaf3ec;--paper:#1f2b24;--line:#3a4a41;--muted:#acbeb1;--accent:#c4df72}
+html[data-theme=dark] .addon svg,html[data-theme=dark] .roadmap svg,html[data-theme=dark] .guardrails svg{fill:#243028;stroke:#58705e}
+html[data-theme=dark] .eyebrow,html[data-theme=dark] .number{color:#8fc3aa}
+html[data-theme=dark] .toggle input{accent-color:#c4df72}
