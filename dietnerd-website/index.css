@@ -187,3 +187,25 @@ body:after{display:none}
 #attachment-label.upload-active:before{content:"";width:10px;height:10px;display:inline-block;border:1.5px solid #b9d1bd;border-top-color:var(--forest);border-radius:50%;animation:uploadSpinner .8s linear infinite}
 @keyframes uploadSpinner{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){#attachment-label.upload-active:before{animation:none;border-color:var(--forest)}}
+
+.conversation-list{display:flex;flex-direction:column;gap:2px;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-right:3px}
+.conversation-row{width:100%;min-height:38px;border:0;border-radius:8px;background:transparent;color:var(--forest);text-align:left;padding:8px 11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 12px "DM Sans",sans-serif;cursor:pointer;transition:background .16s ease,transform .16s ease}
+.conversation-row:hover,.conversation-row:focus-visible{background:#dbe8dc;outline:none;transform:translateX(2px)}
+.conversation-row.active{background:var(--forest);color:var(--paper);font-weight:700}
+.chat-sidebar .conversation-list{flex:1 1 auto}
+@media(max-width:800px){.chat-sidebar .conversation-list{position:absolute;z-index:11;top:49px;left:0;right:0;max-height:min(42vh,350px);display:none;overflow:auto;background:#edf0e4;border-bottom:1px solid var(--line);box-shadow:0 16px 24px rgba(23,63,53,.12);padding:8px}.chat-sidebar.history-open .conversation-list{display:flex}.chat-sidebar .sidebar-heading span{display:none}.chat-sidebar .sidebar-heading .icon-button{width:38px;height:38px}.chat-sidebar .history-toggle{display:block}}
+@media(prefers-reduced-motion:reduce){.conversation-row{transition:none}}
+
+.history-toggle{display:none}
+@media(max-width:800px){.chat-sidebar .history-toggle{flex:1;display:block;height:38px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--forest);padding:0 12px;font:600 12px "DM Sans",sans-serif;cursor:pointer}}
+
+.sidebar-options{border-top:1px solid var(--line);padding:13px 0 6px;display:grid;gap:9px}
+.sidebar-options-heading{font:700 11px "DM Sans",sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.sidebar-options label{display:flex;justify-content:space-between;align-items:center;gap:10px;color:var(--forest);font:600 12px "DM Sans",sans-serif;cursor:pointer}
+.sidebar-options input{appearance:none;position:relative;flex:none;width:30px;height:18px;border:1px solid #b5c9b9;border-radius:999px;background:#ccd7ce;cursor:pointer;transition:background .2s ease}
+.sidebar-options input:before{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--paper);transition:transform .2s ease}
+.sidebar-options input:checked{background:var(--forest)}.sidebar-options input:checked:before{transform:translateX(12px)}
+.sidebar-options input:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+.sidebar-options .sidebar-addons-link{border:0;margin:1px 0 0;padding:0;font-weight:600;font-size:11px}
+@media(max-width:800px){.chat-sidebar .sidebar-options{display:none}}
+@media(prefers-reduced-motion:reduce){.sidebar-options input,.sidebar-options input:before{transition:none}}

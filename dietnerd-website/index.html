@@ -52,9 +52,16 @@
             <aside class="chat-sidebar" aria-label="Conversations">
                 <div class="sidebar-heading"><span>Conversations</span><button type="button" id="new-conversation" class="icon-button" aria-label="New conversation" title="New conversation">+</button></div>
                 <label for="conversation-select" class="visually-hidden">Choose conversation</label>
-                <select id="conversation-select" aria-label="Choose conversation"><option value="">New conversation</option></select>
+                <select id="conversation-select" class="visually-hidden" aria-label="Choose conversation"><option value="">New conversation</option></select>
+                <button type="button" id="history-toggle" class="history-toggle" aria-expanded="false" aria-controls="conversation-list">Chat history ▾</button>
+                <nav id="conversation-list" class="conversation-list" aria-label="Chat history"></nav>
                 <button type="button" id="delete-conversation" class="delete-link">Delete current conversation</button>
-                <a class="sidebar-addons-link" href="addons.html">Research add-ons</a>
+                <div class="sidebar-options" aria-label="Research options">
+                    <span class="sidebar-options-heading">Research options</span>
+                    <label><span>Show claim sources</span><input type="checkbox" id="sidebar-ledger" aria-label="Show claim sources under answers"></label>
+                    <label><span>Save answers</span><input type="checkbox" id="sidebar-notebook" aria-label="Offer save answer button"></label>
+                    <a class="sidebar-addons-link" href="addons.html">See all research tools</a>
+                </div>
                 <div class="sidebar-note"><strong>DietNerd</strong><span>Answers grounded in published research. Check important health information.</span></div>
             </aside>
             <section class="chat-panel" aria-labelledby="chat-title">

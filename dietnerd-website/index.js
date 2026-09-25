@@ -92,15 +92,30 @@ async function refreshConversationList() {
     const data = await response.json();
     document.querySelector('.sidebar-heading span').textContent = `Conversations (${(data.conversations || []).length})`;
     select.innerHTML = '<option value="">New conversation</option>';
+    const list = document.getElementById('conversation-list');
+    list.replaceChildren();
     (data.conversations || []).forEach((conversation) => {
         const option = document.createElement('option');
         option.value = conversation.conversation_id;
         option.textContent = conversation.title || 'Untitled conversation';
         select.appendChild(option);
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'conversation-row';
+        row.dataset.conversationId = conversation.conversation_id;
+        row.title = conversation.title || 'Untitled conversation';
+        row.textContent = conversation.title || 'Untitled conversation';
+        list.appendChild(row);
     });
     const latestId = (data.conversations || [])[0]?.conversation_id || '';
     const selectedId = (data.conversations || []).some(c => c.conversation_id === currentId) ? currentId : latestId;
     select.value = selectedId;
+    list.querySelectorAll('.conversation-row').forEach(row => {
+        const active = row.dataset.conversationId === selectedId;
+        row.classList.toggle('active', active);
+        if (active) row.setAttribute('aria-current', 'true');
+        else row.removeAttribute('aria-current');
+    });
     if (selectedId && selectedId !== currentId && !questionInFlight &&
         !document.querySelector('#chat-thread .chat-message.user')) {
         sessionStorage.setItem('dietnerd_conversation_id', selectedId);
@@ -984,6 +999,20 @@ document.getElementById('submit').addEventListener('click', async () => {
 });
 
 
+document.getElementById('history-toggle').addEventListener('click', () => {
+    const sidebar = document.querySelector('.chat-sidebar');
+    const open = sidebar.classList.toggle('history-open');
+    document.getElementById('history-toggle').setAttribute('aria-expanded', String(open));
+});
+document.getElementById('conversation-list').addEventListener('click', (event) => {
+    const row = event.target.closest('.conversation-row');
+    if (!row) return;
+    document.getElementById('conversation-select').value = row.dataset.conversationId;
+    document.getElementById('conversation-select').dispatchEvent(new Event('change'));
+    document.querySelector('.chat-sidebar').classList.remove('history-open');
+    document.getElementById('history-toggle').setAttribute('aria-expanded', 'false');
+});
+
 document.getElementById('conversation-select').addEventListener('change', async (event) => {
     const conversationId = event.target.value;
     if (!conversationId) {
@@ -992,6 +1021,12 @@ document.getElementById('conversation-select').addEventListener('change', async 
     }
     sessionStorage.setItem('dietnerd_conversation_id', conversationId);
     await renderSelectedConversation(conversationId);
+    document.querySelectorAll('.conversation-row').forEach(row => {
+        const active = row.dataset.conversationId === conversationId;
+        row.classList.toggle('active', active);
+        if (active) row.setAttribute('aria-current', 'true');
+        else row.removeAttribute('aria-current');
+    });
 });
 
 document.getElementById('new-conversation').addEventListener('click', () => {
@@ -999,6 +1034,7 @@ document.getElementById('new-conversation').addEventListener('click', () => {
     closeSourcesPanel();
     sessionStorage.removeItem('dietnerd_conversation_id');
     document.getElementById('conversation-select').value = '';
+    document.querySelectorAll('.conversation-row.active').forEach(row => { row.classList.remove('active'); row.removeAttribute('aria-current'); });
     document.getElementById('question').value = '';
     document.getElementById('chat-thread').innerHTML = '<div class="welcome-message"><span class="assistant-avatar">D</span><div><h2>Start a new conversation</h2><p>Ask a diet or nutrition question to begin.</p></div></div>';
     document.getElementById('similarQuestions').style.display = 'none';
@@ -1040,6 +1076,14 @@ document.getElementById('chat-thread').addEventListener('click', (event) => {
     input.dispatchEvent(new Event('input', { bubbles: true }));
     document.getElementById('submit').click();
 });
+for (const feature of ['ledger', 'notebook']) {
+    const checkbox = document.getElementById(`sidebar-${feature}`);
+    checkbox.checked = ChronicNerdAddons.enabled(feature);
+    checkbox.addEventListener('change', () => {
+        try { ChronicNerdAddons.setEnabled(feature, checkbox.checked); }
+        catch { checkbox.checked = !checkbox.checked; }
+    });
+}
 const composerInput = document.getElementById('question');
 composerInput.addEventListener('input', () => { composerInput.style.height = 'auto'; composerInput.style.height = `${Math.min(composerInput.scrollHeight, 140)}px`; });
 
