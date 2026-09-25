@@ -291,3 +291,33 @@ body:after{display:none}
 .account-dropdown .account-menu-link:hover,.account-dropdown button:hover,.account-dropdown :is(button,a):focus-visible{background:#eaf0e9;color:#12372e;outline:2px solid transparent}
 .account-dropdown #logout-link{margin-top:5px;border-top:1px solid var(--line);border-radius:0 0 10px 10px;color:var(--danger)}
 .account-dropdown #logout-link:hover{background:#f7ebe7}
+
+#session-countdown{display:inline-block;margin-left:8px;color:var(--muted);font:600 11px "DM Sans",sans-serif;white-space:nowrap}#session-countdown[hidden]{display:none}
+@media(max-width:800px){#session-countdown{display:none}}
+
+.chat-sidebar .sidebar-heading{gap:6px}.chat-sidebar .sidebar-heading>span{min-width:0;flex:1}.temporary-chat-button{flex:0 0 auto;border:1px solid #b7cbbd;border-radius:9px;background:#fffdf7;color:var(--forest);padding:8px 9px;font:700 11px "DM Sans",sans-serif;cursor:pointer}.temporary-chat-button[aria-pressed="true"]{background:var(--forest);color:var(--paper)}.temporary-chat-button:hover{box-shadow:0 2px 9px rgba(23,63,53,.12)}
+
+.chat-sidebar .sidebar-heading>span{min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-sidebar .sidebar-heading .temporary-chat-button{white-space:nowrap}
+.composer #attach-button:disabled{opacity:.45;cursor:not-allowed;transform:none}
+
+body.temporary-mode .chat-sidebar .sidebar-heading>span{display:none}
+
+
+.toolbar .account-menu{position:relative;overflow:visible}
+.toolbar .account-dropdown{box-sizing:border-box;right:0;top:calc(100% + 7px);width:220px;min-width:220px;padding:6px;background:var(--paper);border:1px solid var(--line);border-radius:13px;box-shadow:0 15px 35px rgba(23,63,53,.16);z-index:30}
+.toolbar .account-dropdown :is(a,button){box-sizing:border-box;display:block;width:100%;min-height:42px;margin:0;padding:11px 12px;border:0;border-radius:7px;background:transparent;color:var(--forest);text-align:left;text-decoration:none;font:600 13px/1.4 "DM Sans",sans-serif;box-shadow:none;transform:none;white-space:nowrap;cursor:pointer}
+.toolbar .account-dropdown :is(a,button):hover,.toolbar .account-dropdown :is(a,button):focus-visible{background:#eef2e9;outline:none;transform:none}
+.toolbar .account-dropdown #logout-link{height:auto;margin:5px 0 0;padding-top:12px;border:0;border-top:1px solid var(--line);border-radius:0 0 7px 7px;color:var(--danger);background:transparent;box-shadow:none}
+.toolbar .account-dropdown #logout-link:hover,.toolbar .account-dropdown #logout-link:focus-visible{background:#fbefec}
+.signout-dialog p:not(.dialog-error){color:var(--muted);font-size:14px;line-height:1.5;margin:0}
+.signout-dialog .dialog-actions .primary-button{background:var(--danger)}
+@media(max-width:800px){.toolbar .account-dropdown{width:min(220px,calc(100vw - 24px));min-width:0}}
+
+@media(max-width:800px){
+  body.conversation-mode .toolbar{display:flex;flex:none;height:44px;min-height:44px;padding:0 10px;overflow:visible;z-index:30;background:#f8f7f0;border-bottom:1px solid var(--line)}
+  body.conversation-mode .toolbar>a{display:none}
+  body.conversation-mode .toolbar .account-menu{flex:none;max-width:none;margin-left:auto}
+  body.conversation-mode .toolbar #account-button{height:34px;max-width:min(65vw,240px);font-size:12px}
+  body.conversation-mode .toolbar .account-dropdown{z-index:31}
+}

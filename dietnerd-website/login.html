@@ -16,7 +16,7 @@
             <h2>Sign in to continue</h2>
             <div class="form-group">
                 <label for="login-email">Email</label>
-                <input type="email" id="login-email" autocomplete="email" placeholder="you@example.com" required>
+                <input type="email" id="login-email" name="username" autocomplete="username" placeholder="you@example.com" required>
             </div>
             <div class="form-group">
                 <label for="login-password">Password</label>
@@ -25,7 +25,7 @@
                     <button type="button" class="toggle-password" data-target="login-password" aria-label="Show password">Show</button>
                 </div>
             </div>
-            <p class="forgot-row"><a href="#" data-show="forgot-form">Forgot password?</a></p>
+            <p class="recovery-warning">There is no password recovery or reset for this account. Save your password.</p>
             <button type="submit" class="auth-button" id="login-button">Sign in</button>
             <div id="login-error" class="error-message" role="alert"></div>
             <div id="login-info" class="success-message" role="status"></div>
@@ -37,7 +37,7 @@
             <h2>Create your account</h2>
             <div class="form-group">
                 <label for="register-email">Email</label>
-                <input type="email" id="register-email" autocomplete="email" placeholder="you@example.com" required>
+                <input type="email" id="register-email" name="username" autocomplete="username" placeholder="you@example.com" required>
             </div>
             <div class="form-group">
                 <label for="register-password">Password</label>
@@ -50,43 +50,12 @@
                 <label for="register-confirm">Confirm password</label>
                 <input type="password" id="register-confirm" autocomplete="new-password" placeholder="Type it again" required>
             </div>
+            <p class="signup-password-hint">Save this password in your password manager before creating the account.</p>
             <button type="submit" class="auth-button" id="register-button">Create account</button>
             <div id="register-error" class="error-message" role="alert"></div>
             <p class="toggle-text">Already have an account? <a href="#" data-show="login-form">Sign in</a></p>
         </form>
 
-        <!-- Forgot password -->
-        <form id="forgot-form" class="auth-form" hidden novalidate>
-            <h2>Reset your password</h2>
-            <p class="form-intro">Enter the email you signed up with. We'll send you a link to choose a new password.</p>
-            <div class="form-group">
-                <label for="forgot-email">Email</label>
-                <input type="email" id="forgot-email" autocomplete="email" placeholder="you@example.com" required>
-            </div>
-            <button type="submit" class="auth-button" id="forgot-button">Send reset link</button>
-            <div id="forgot-error" class="error-message" role="alert"></div>
-            <div id="forgot-success" class="success-message" role="status"></div>
-            <p class="toggle-text"><a href="#" data-show="login-form">Back to sign in</a></p>
-        </form>
-
-        <!-- Choose new password (from the emailed link) -->
-        <form id="reset-form" class="auth-form" hidden novalidate>
-            <h2>Choose a new password</h2>
-            <div class="form-group">
-                <label for="reset-password">New password</label>
-                <div class="password-field">
-                    <input type="password" id="reset-password" autocomplete="new-password" placeholder="At least 8 characters" minlength="8" required>
-                    <button type="button" class="toggle-password" data-target="reset-password" aria-label="Show password">Show</button>
-                </div>
-            </div>
-            <div class="form-group">
-                <label for="reset-confirm">Confirm new password</label>
-                <input type="password" id="reset-confirm" autocomplete="new-password" placeholder="Type it again" required>
-            </div>
-            <button type="submit" class="auth-button" id="reset-button">Save new password</button>
-            <div id="reset-error" class="error-message" role="alert"></div>
-            <p class="toggle-text"><a href="#" data-show="login-form">Back to sign in</a></p>
-        </form>
     </div>
     <script src="env.js"></script>
     <script src="api.js"></script>

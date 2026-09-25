@@ -180,6 +180,8 @@ class QueryModel(BaseModel):
     # clients that still send it are not rejected.
     email: Optional[str] = None
     conversation_id: Optional[str] = None
+    temporary: bool = False
+    temporary_history: Optional[List[Dict[str, str]]] = None
 
 class AuthModel(BaseModel):
     email: str
@@ -251,7 +253,9 @@ def _email_for_token(token: Optional[str]) -> Optional[str]:
     try:
         cursor = connection.cursor()
         cursor.execute(
-            "SELECT email FROM user_sessions WHERE token_hash = %s AND expires_at > UTC_TIMESTAMP()",
+            "SELECT email FROM user_sessions WHERE token_hash = %s "
+            "AND expires_at > UTC_TIMESTAMP() "
+            "AND DATE_ADD(created_at, INTERVAL 14 DAY) > UTC_TIMESTAMP()",
             (auth.token_digest(token),),
         )
         row = cursor.fetchone()
@@ -315,7 +319,7 @@ async def register(auth_body: AuthModel, response: Response):
         cursor = connection.cursor()
         cursor.execute("SELECT email FROM users WHERE email = %s", (email,))
         if cursor.fetchone():
-            raise HTTPException(status_code=409, detail="An account with this email already exists. Try signing in or resetting your password.")
+            raise HTTPException(status_code=409, detail="An account with this email already exists. Try signing in.")
         cursor.execute("INSERT INTO users (email, password) VALUES (%s, %s)", (email, auth.hash_password(password)))
         connection.commit()
     finally:
@@ -368,69 +372,22 @@ async def logout(request: Request, response: Response):
     return {"status": "ok"}
 
 @app.get("/me")
-async def me(email: str = Depends(current_user)):
-    return {"email": email}
-
-@app.post("/forgot_password")
-async def forgot_password(body: ForgotPasswordModel, request: Request):
-    email = auth.normalize_email(body.email)
-    generic = {"message": "If an account exists for that email, we've sent a link to reset the password."}
-    if not reset_limiter.allow(f"{_client_key(request)}|{email}"):
-        raise HTTPException(status_code=429, detail="Too many reset requests. Please wait a few minutes and try again.")
-    if auth.validate_email(email):
-        return generic
+async def me(request: Request, email: str = Depends(current_user)):
     connection = _get_db_connection()
     try:
         cursor = connection.cursor()
-        cursor.execute("SELECT 1 FROM users WHERE email = %s", (email,))
-        exists = cursor.fetchone() is not None
-        if not exists:
-            return generic
-        token = auth.new_token()
-        # One live reset link per account.
-        cursor.execute("DELETE FROM password_resets WHERE email = %s", (email,))
         cursor.execute(
-            "INSERT INTO password_resets (token_hash, email, expires_at) "
-            "VALUES (%s, %s, DATE_ADD(UTC_TIMESTAMP(), INTERVAL %s SECOND))",
-            (auth.token_digest(token), email, auth.RESET_TTL_SECONDS),
-        )
-        connection.commit()
-    finally:
-        connection.close()
-    base = os.getenv("PUBLIC_SITE_URL", "").rstrip("/") or (request.headers.get("origin") or "").rstrip("/")
-    reset_url = f"{base}/login.html#reset_token={token}"
-    auth.send_reset_email(email, reset_url)
-    return generic
-
-@app.post("/reset_password")
-async def reset_password(body: ResetPasswordModel):
-    problem = auth.validate_password(body.password)
-    if problem:
-        raise HTTPException(status_code=400, detail=problem)
-    digest = auth.token_digest(body.token or "")
-    connection = _get_db_connection()
-    try:
-        cursor = connection.cursor()
-        connection.start_transaction()
-        cursor.execute(
-            "SELECT email FROM password_resets WHERE token_hash = %s AND used_at IS NULL "
-            "AND expires_at > UTC_TIMESTAMP() FOR UPDATE",
-            (digest,),
+            "SELECT GREATEST(0, TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), "
+            "LEAST(expires_at, DATE_ADD(created_at, INTERVAL 14 DAY)))) "
+            "FROM user_sessions WHERE token_hash = %s AND email = %s",
+            (auth.token_digest(_session_token(request)), email),
         )
         row = cursor.fetchone()
         if not row:
-            connection.rollback()
-            raise HTTPException(status_code=400, detail="This reset link is invalid or has expired. Please request a new one.")
-        email = row[0]
-        cursor.execute("UPDATE password_resets SET used_at = UTC_TIMESTAMP() WHERE token_hash = %s", (digest,))
-        cursor.execute("UPDATE users SET password = %s WHERE email = %s", (auth.hash_password(body.password), email))
-        cursor.execute("DELETE FROM user_sessions WHERE email = %s", (email,))
-        connection.commit()
+            raise HTTPException(status_code=401, detail="Please sign in.")
+        return {"email": email, "session_expires_in_seconds": row[0]}
     finally:
         connection.close()
-    byok.remove_user(email)
-    logging.info("[AUTH] Password reset completed")
-    return {"message": "Your password has been reset. Please sign in with the new password."}
 
 @app.post("/change_password")
 async def change_password(body: ChangePasswordModel, request: Request, email: str = Depends(current_user)):
@@ -539,6 +496,10 @@ async def check_valid(question:str, email: str = Depends(current_user)):
    else:
     final_output = "good"
    return {"response" : final_output}
+
+@app.post("/check_valid")
+async def check_valid_private(query: QueryModel, email: str = Depends(current_user)):
+    return await check_valid(query.user_query, email)
 
 def create_conversation(email: str, title: Optional[str] = None) -> str:
     conversation_id = str(uuid.uuid4())
@@ -790,6 +751,22 @@ async def process_query(background_tasks: BackgroundTasks, query: QueryModel, re
         raise HTTPException(status_code=409, detail="Add an API key for this session before asking a research question.")
     request_id = str(uuid.uuid4())
     conversation_id = query.conversation_id
+    if query.temporary and conversation_id:
+        raise HTTPException(status_code=400, detail="Temporary research cannot use a saved conversation.")
+    if query.temporary_history and not query.temporary:
+        raise HTTPException(status_code=400, detail="Temporary history requires temporary mode.")
+    temporary_history = []
+    if query.temporary:
+        if len(query.temporary_history or []) > 8:
+            raise HTTPException(status_code=400, detail="Too many temporary turns.")
+        for turn in query.temporary_history or []:
+            if not isinstance(turn, dict) or not isinstance(turn.get("raw_question"), str) or not isinstance(turn.get("answer"), str):
+                raise HTTPException(status_code=400, detail="Invalid temporary turn.")
+            question = turn["raw_question"].strip()
+            answer = turn["answer"].strip()
+            if not question or not answer or len(question) > 2000 or len(answer) > 15000:
+                raise HTTPException(status_code=400, detail="Temporary turn is too large.")
+            temporary_history.append({"raw_question": question, "standalone_question": question, "answer": answer})
     if conversation_id and not conversation_belongs_to(query.email, conversation_id):
         raise HTTPException(status_code=404, detail="Conversation not found.")
     with request_event_lock:
@@ -812,7 +789,7 @@ async def process_query(background_tasks: BackgroundTasks, query: QueryModel, re
         request_updated_at[request_id] = time.monotonic()
         request_created_at[request_id] = time.monotonic()
         request_owners[request_id] = email
-    if not conversation_id:
+    if not conversation_id and not query.temporary:
         try:
             conversation_id = create_conversation(query.email, query.user_query[:120])
         except Exception:
@@ -823,7 +800,7 @@ async def process_query(background_tasks: BackgroundTasks, query: QueryModel, re
                 request_created_at.pop(request_id, None)
                 request_owners.pop(request_id, None)
             raise
-    background_tasks.add_task(_run_research_with_key, query.user_query, request_id, query.email, conversation_id, auth.token_digest(token) if key else None)
+    background_tasks.add_task(_run_research_with_key, query.user_query, request_id, query.email, conversation_id, auth.token_digest(token) if key else None, temporary_history)
     return JSONResponse({"request_id": request_id, "conversation_id": conversation_id})
 
 def _prune_request_events():
@@ -901,17 +878,18 @@ def get_user_documents(email: str):
     finally:
         connection.close()
 
-def _run_research_with_key(user_query, request_id, email, conversation_id, token_hash):
+def _run_research_with_key(user_query, request_id, email, conversation_id, token_hash, temporary_history=None):
     scope = byok.activate(token_hash, email) if token_hash else None
     try:
-        result = process_user_query(user_query, request_id, email, conversation_id)
-        logging.info("Conversation title job queued")
-        scope_context = copy_context()
-        threading.Thread(
-            target=scope_context.run,
-            args=(update_conversation_title, email, conversation_id),
-            daemon=True,
-        ).start()
+        result = process_user_query(user_query, request_id, email, conversation_id, temporary_history)
+        if conversation_id:
+            logging.info("Conversation title job queued")
+            scope_context = copy_context()
+            threading.Thread(
+                target=scope_context.run,
+                args=(update_conversation_title, email, conversation_id),
+                daemon=True,
+            ).start()
         return result
     except Exception as exc:
         # Log only the exception class and numeric provider status. Exception
@@ -1003,19 +981,19 @@ def _send_article_titles(request_id: str, articles: list, stage: str):
         }))
 
 
-def process_user_query(user_query, request_id, email, conversation_id):
-    session_memory = get_session_memory(email, conversation_id)
+def process_user_query(user_query, request_id, email, conversation_id, temporary_history=None):
+    session_memory = get_session_memory(email, conversation_id) if conversation_id else (temporary_history or [])
     raw_question = user_query
 
     if session_memory:
         user_query = generate_standalone_question(user_query, session_memory)
-        logging.info(f"[SESSION MEMORY] Standalone question generated: '{user_query}'")
+        if conversation_id: logging.info("[SESSION MEMORY] Standalone question generated")
 
     user_attachment_context = None
     attachment_exist = False
     attachment_based_answer = False
 
-    if check_attachment_exists(email):
+    if conversation_id and check_attachment_exists(email):
         attachment_exist = True
         documents = get_user_documents(email)
         if documents:
@@ -1042,11 +1020,13 @@ def process_user_query(user_query, request_id, email, conversation_id):
                     "answer": attachment_answer
                 }
             }
-            append_session_memory(email, conversation_id, return_obj["session_memory_entry"])
-            conversation_summary = update_conversation_summary(
-                get_conversation_summary(email, conversation_id), user_query, attachment_answer
-            )
-            set_conversation_summary(email, conversation_id, conversation_summary)
+            if conversation_id:
+                append_session_memory(email, conversation_id, return_obj["session_memory_entry"])
+            if conversation_id:
+                conversation_summary = update_conversation_summary(
+                    get_conversation_summary(email, conversation_id), user_query, attachment_answer
+                )
+                set_conversation_summary(email, conversation_id, conversation_summary)
             loop.run_until_complete(send_update(request_id, return_obj))
             return return_obj
         else:
@@ -1055,7 +1035,7 @@ def process_user_query(user_query, request_id, email, conversation_id):
                 attachment_partial_answer = attachment_answer
             if question_not_answered:
                 partial_question = question_not_answered
-                logging.info(f"[ATTACHMENT] Sending unanswered portion to PubMed: '{partial_question}'")
+                logging.info("[ATTACHMENT] Sending unanswered portion to PubMed")
 
     pipeline_query = partial_question if attachment_partial_answer and partial_question else user_query
 
@@ -1065,7 +1045,8 @@ def process_user_query(user_query, request_id, email, conversation_id):
     end_poc = time.time()
 
     print("Generated PubMed queries")
-    print(query_list)
+    if conversation_id:
+        print(query_list)
     loop.run_until_complete(send_update(request_id, "Generated PubMed queries..."))
     # Article Retrieval
     start_api = time.time()
@@ -1097,7 +1078,8 @@ def process_user_query(user_query, request_id, email, conversation_id):
     relevant_article_summaries = concurrent_article_processing(articles_to_process)
 
     # Write Processed Articles to DB
-    write_articles_to_db(relevant_article_summaries, env)
+    if conversation_id:
+        write_articles_to_db(relevant_article_summaries, env)
 
     all_relevant_articles = list(itertools.chain(relevant_article_summaries, matched_articles))
     end_processing = time.time()
@@ -1119,24 +1101,27 @@ def process_user_query(user_query, request_id, email, conversation_id):
     final_output_duration = end_output - start_output
     total_runtime = poc_duration + api_duration + article_processing_duration + final_output_duration
 
-    write_output_to_db(user_query, final_output, all_relevant_articles, total_runtime, env)
+    if conversation_id:
+        write_output_to_db(user_query, final_output, all_relevant_articles, total_runtime, env)
     end_output = time.time()
 
     print('-'*200)
-    print(final_output)
-    print('-'*20)
-    print('User Question: ', user_query)
-    print('-'*20)
-    print('General Query: ', general_query)
-    print('-'*20)
-    print('Points of Contention: ', query_contention)
+    if conversation_id:
+        print(final_output)
+        print('-'*20)
+        print('User Question: ', user_query)
+        print('-'*20)
+        print('General Query: ', general_query)
+        print('-'*20)
+        print('Points of Contention: ', query_contention)
     print('-'*20)
 
     print('# Matched: ', len(matched_articles))
     print('# Processed: ', len(articles_to_process))
     print('# Relevant: ', len(all_relevant_articles))
     print('# Irrelevant: ', len(irrelevant_articles))
-    print('Relevant Articles: ', all_relevant_articles)
+    if conversation_id:
+        print('Relevant Articles: ', all_relevant_articles)
     print('-'*20)
     print('Total Runtime: ', total_runtime)
     print(' -- ')
@@ -1170,14 +1155,17 @@ def process_user_query(user_query, request_id, email, conversation_id):
         "sources": extract_answer_sources(final_output, updated_citations, return_obj["evidence_ledger"]),
         "evidence_ledger": return_obj["evidence_ledger"]
     }
-    append_session_memory(email, conversation_id, session_memory_entry)
+    if conversation_id:
+        append_session_memory(email, conversation_id, session_memory_entry)
     return_obj["session_memory_entry"] = session_memory_entry
-    logging.info(f"[SESSION MEMORY] Entry created | request_id={request_id} | email={email}")
+    if conversation_id:
+        logging.info("[SESSION MEMORY] Entry created | request_id=%s", request_id)
 
-    conversation_summary = update_conversation_summary(
-        get_conversation_summary(email, conversation_id), user_query, final_output
-    )
-    set_conversation_summary(email, conversation_id, conversation_summary)
+    if conversation_id:
+        conversation_summary = update_conversation_summary(
+            get_conversation_summary(email, conversation_id), user_query, final_output
+        )
+        set_conversation_summary(email, conversation_id, conversation_summary)
 
     loop.run_until_complete(send_update(request_id, return_obj))
 

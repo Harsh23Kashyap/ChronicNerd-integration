@@ -2,8 +2,10 @@
 const baseURL = DietNerdAPI.baseURL;
 const apiFetch = DietNerdAPI.apiFetch;
 
+let temporaryChat = false;
+let temporaryTurns = [];
 function getConversationId() {
-    return sessionStorage.getItem('dietnerd_conversation_id') || null;
+    return temporaryChat ? null : (sessionStorage.getItem('dietnerd_conversation_id') || null);
 }
 
 function clearChatThread() {
@@ -303,7 +305,9 @@ To find a local expert near you, use this website: https://www.eatright.org/find
 async function check_valid(userQuery) {
     console.log("Checking valid");
     try {
-        const response = await apiFetch(`/check_valid/${encodeURIComponent(userQuery)}`);
+        const response = temporaryChat
+            ? await apiFetch('/check_valid', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({user_query: userQuery})})
+            : await apiFetch(`/check_valid/${encodeURIComponent(userQuery)}`);
         if (!response.ok) {
             throw new Error('Network response was not ok');
         }
@@ -695,7 +699,7 @@ async function refreshExistingAttachments() {
     const documentNames = Array.isArray(data.documents) ? data.documents : [];
     attachmentExists = documentNames.length > 0;
     existingAttachmentsElement.replaceChildren(...documentNames.map(name => renderAttachmentChip(name)));
-    label.textContent = attachmentExists ? '' : 'No file attached';
+    label.textContent = temporaryChat ? 'Attachments unavailable in temporary chat' : attachmentExists ? '' : 'No file attached';
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -707,7 +711,7 @@ document.addEventListener('DOMContentLoaded', function () {
     refreshConversationList();
 
     fileInput.addEventListener('change', async function () {
-        if (!fileInput.files.length) return;
+        if (temporaryChat || !fileInput.files.length) return;
         const file = fileInput.files[0];
         fileInput.value = '';
         const formData = new FormData();
@@ -739,7 +743,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     existingAttachmentsElement.addEventListener('click', async function (event) {
         const removeButton = event.target.closest('.existing-attachment-remove');
-        if (!removeButton || removeButton.disabled) return;
+        if (temporaryChat || !removeButton || removeButton.disabled) return;
         const filename = removeButton.dataset.filename;
         const chip = removeButton.closest('.existing-attachment-item');
         removeButton.disabled = true;
@@ -877,7 +881,7 @@ function showAssistantAnswer(answer, ledger = [], question = '', storedSources =
     const content = appendChatMessage('assistant', answer, [], storedSources);
     appendEvidenceLedger(content, ledger);
     appendInChatSources(content, sourcesForAnswer(answer, ledger, storedSources));
-    document.getElementById('generate-pdf-button').classList.remove('hidden');
+    if (!temporaryChat) document.getElementById('generate-pdf-button').classList.remove('hidden');
 }
 
 function conversationHasTurns() {
@@ -893,17 +897,20 @@ function setComposerBusy(busy) {
 }
 
 async function runGeneration(userQuery, pending) {
+    const isTemporary = temporaryChat;
     const response = await apiFetch('/process_query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_query: userQuery, conversation_id: getConversationId() }),
+        body: JSON.stringify({ user_query: userQuery, conversation_id: getConversationId(), temporary: isTemporary, temporary_history: isTemporary ? temporaryTurns.slice(-8) : [] }),
     });
     if (!response.ok) {
         throw new Error(await DietNerdAPI.readError(response, `The question could not be sent (${response.status}).`));
     }
     const data = await response.json();
-    sessionStorage.setItem('dietnerd_conversation_id', data.conversation_id);
-    refreshConversationList();
+    if (!isTemporary) {
+        sessionStorage.setItem('dietnerd_conversation_id', data.conversation_id);
+        refreshConversationList();
+    }
 
     return new Promise((resolve, reject) => {
         const eventSource = new EventSource(`${baseURL}/sse?request_id=${encodeURIComponent(data.request_id)}`, { withCredentials: true });
@@ -914,12 +921,16 @@ async function runGeneration(userQuery, pending) {
             if (lostAt && Date.now() - lostAt > 60000) {
                 window.clearInterval(reconnectTimer);
                 eventSource.close();
-                readConversationHistory(data.conversation_id).then(async history => {
-                    if (!history.ok) throw new Error('Could not retrieve the saved research answer.');
-                    const saved = (await history.json()).entries?.find(entry => entry.request_id === data.request_id);
-                    if (saved?.answer) resolve({end_output:saved.answer, session_memory_entry:saved});
-                    else reject(new Error('Research connection did not recover. Open this conversation from history to check whether the answer finished.'));
-                }).catch(reject);
+                if (isTemporary) {
+                    reject(new Error('Research connection did not recover. Temporary answers cannot be restored after a disconnect.'));
+                } else {
+                    readConversationHistory(data.conversation_id).then(async history => {
+                        if (!history.ok) throw new Error('Could not retrieve the saved research answer.');
+                        const saved = (await history.json()).entries?.find(entry => entry.request_id === data.request_id);
+                        if (saved?.answer) resolve({end_output:saved.answer, session_memory_entry:saved});
+                        else reject(new Error('Research connection did not recover. Open this conversation from history to check whether the answer finished.'));
+                    }).catch(reject);
+                }
             }
         }, 1000);
         eventSource.onopen = () => {
@@ -934,7 +945,7 @@ async function runGeneration(userQuery, pending) {
             if (message.update.end_output) {
                 window.clearInterval(reconnectTimer);
                 eventSource.close();
-                try {
+                if (!isTemporary) try {
                     localStorage.setItem('referenceObject', JSON.stringify(message.update.citations_obj || {}));
                     localStorage.setItem('citations', JSON.stringify(message.update.citations || []));
                 } catch (error) { console.warn('Could not save reference metadata locally.'); }
@@ -965,6 +976,7 @@ async function generateAnswer(question) {
         const result = await runGeneration(question, pending);
         pending.remove();
         showAssistantAnswer(result.end_output, result.evidence_ledger || [], question, result.session_memory_entry?.sources || null);
+        if (temporaryChat) temporaryTurns.push({raw_question: question.slice(0, 2000), answer: result.end_output.slice(0, 15000)});
         refreshTitleAfterAnswer(getConversationId());
     } catch (err) {
         console.error(err);
@@ -1052,6 +1064,10 @@ document.getElementById('submit').addEventListener('click', async () => {
         hintElement.textContent = 'Please type a question first.';
         return;
     }
+    if (temporaryChat && question.length > 2000) {
+        hintElement.textContent = 'Temporary questions must be 2,000 characters or fewer.';
+        return;
+    }
     document.getElementById('generate-pdf-button').classList.add('hidden');
     document.getElementById('example-questions')?.classList.add('hidden');
     similarQuestionsContainer.style.display = 'none';
@@ -1061,10 +1077,12 @@ document.getElementById('submit').addEventListener('click', async () => {
     appendChatMessage('user', question);
     input.value = '';
 
-    if (attachmentExists) {
+    if (attachmentExists && !temporaryChat) {
         await answerFromAttachment(question);
         return;
     }
+
+    if (temporaryChat) { await generateAnswer(question); return; }
 
     setComposerBusy(true);
     const initialStatus = appendPendingMessage();
@@ -1126,6 +1144,20 @@ document.getElementById('conversation-select').addEventListener('change', async 
         document.getElementById('new-conversation').click();
         return;
     }
+    if (questionInFlight) {
+        document.getElementById('conversation-select').value = getConversationId() || '';
+        return;
+    }
+    temporaryChat = false;
+    document.body.classList.remove('temporary-mode');
+    temporaryTurns = [];
+    document.getElementById('attach-button').title = 'Attach a file';
+    document.getElementById('temporary-chat').setAttribute('aria-pressed', 'false');
+    document.getElementById('delete-conversation').hidden = false;
+    document.getElementById('attach-button').disabled = false;
+    document.getElementById('existing-attachments').hidden = false;
+    document.getElementById('attachment-label').textContent = attachmentExists ? '' : 'No file attached';
+    document.getElementById('chat-title').textContent = 'DietNerd assistant';
     sessionStorage.setItem('dietnerd_conversation_id', conversationId);
     await renderSelectedConversation(conversationId);
     document.querySelectorAll('.conversation-row').forEach(row => {
@@ -1136,7 +1168,34 @@ document.getElementById('conversation-select').addEventListener('change', async 
     });
 });
 
+document.getElementById('temporary-chat').addEventListener('click', () => {
+    if (questionInFlight) return;
+    document.getElementById('new-conversation').click();
+    temporaryChat = true;
+    document.body.classList.add('temporary-mode');
+    temporaryTurns = [];
+    document.getElementById('attach-button').title = 'Attachments are unavailable in temporary chat';
+    document.getElementById('temporary-chat').setAttribute('aria-pressed', 'true');
+    document.getElementById('chat-title').textContent = 'Temporary chat';
+    document.getElementById('delete-conversation').hidden = true;
+    document.getElementById('attach-button').disabled = true;
+    document.getElementById('existing-attachments').hidden = true;
+    document.getElementById('attachment-label').textContent = 'Attachments unavailable in temporary chat';
+    document.querySelector('.hint').textContent = 'Not in chat history. This tab only; closing or leaving clears it.';
+});
+
 document.getElementById('new-conversation').addEventListener('click', () => {
+    if (questionInFlight) return;
+    document.getElementById('attach-button').disabled = false;
+    document.getElementById('existing-attachments').hidden = false;
+    document.getElementById('attachment-label').textContent = attachmentExists ? '' : 'No file attached';
+    temporaryChat = false;
+    document.body.classList.remove('temporary-mode');
+    temporaryTurns = [];
+    document.getElementById('attach-button').title = 'Attach a file';
+    document.getElementById('temporary-chat').setAttribute('aria-pressed', 'false');
+    document.getElementById('chat-title').textContent = 'DietNerd assistant';
+    document.getElementById('delete-conversation').hidden = false;
     enterConversationMode();
     closeSourcesPanel();
     ++conversationLoadToken;

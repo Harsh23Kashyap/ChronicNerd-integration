@@ -27,6 +27,22 @@
         document.documentElement.classList.remove('auth-pending');
         loading?.remove();
         document.getElementById('account-email').textContent = email || 'Account';
+        const seconds = Number(window.DietNerdAPI.sessionExpiresInSeconds);
+        if (Number.isFinite(seconds) && seconds > 0) {
+            const expiry = Date.now() + seconds * 1000;
+            const label = document.getElementById('session-countdown');
+            label.hidden = false;
+            const update = () => {
+                const remaining = Math.max(0, Math.ceil((expiry - Date.now()) / 1000));
+                const days = Math.floor(remaining / 86400);
+                const hours = Math.floor((remaining % 86400) / 3600);
+                const minutes = Math.ceil((remaining % 3600) / 60);
+                label.textContent = remaining ? `Sign-out in ${days ? `${days}d ` : ''}${days || hours ? `${hours}h` : `${minutes}m`}` : 'Session expired';
+                if (!remaining) { window.clearInterval(timer); location.replace('login.html'); }
+            };
+            const timer = window.setInterval(update, 60000);
+            update();
+        }
         if (email === undefined) {
             document.querySelector('.hint').textContent = 'DietNerd cannot reach its server right now. Please try again in a moment.';
         }
@@ -50,11 +66,29 @@
     document.addEventListener('click', (event) => { if (!dropdown.contains(event.target)) closeMenu(); });
     document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMenu(); });
 
-    document.getElementById('logout-link').addEventListener('click', async () => {
-        try { await apiFetch('/logout', { method: 'POST', allowUnauthorized: true }); } catch (e) { /* signing out locally anyway */ }
-        sessionStorage.removeItem('dietnerd_user');
-        sessionStorage.removeItem('dietnerd_conversation_id');
-        window.location.href = 'login.html';
+    const signoutDialog = document.getElementById('signout-dialog');
+    const signoutConfirm = document.getElementById('signout-confirm');
+    document.getElementById('logout-link').addEventListener('click', () => {
+        closeMenu();
+        document.getElementById('signout-error').textContent = '';
+        signoutDialog.showModal();
+        document.getElementById('signout-cancel').focus();
+    });
+    document.getElementById('signout-cancel').addEventListener('click', () => signoutDialog.close());
+    signoutConfirm.addEventListener('click', async () => {
+        if (signoutConfirm.disabled) return;
+        signoutConfirm.disabled = true;
+        try {
+            const response = await apiFetch('/logout', { method: 'POST', allowUnauthorized: true });
+            if (!response.ok) throw new Error('Could not sign out. Try again.');
+            sessionStorage.removeItem('dietnerd_user');
+            sessionStorage.removeItem('dietnerd_conversation_id');
+            window.location.href = 'login.html';
+        } catch (e) {
+            document.getElementById('signout-error').textContent = 'Could not sign out. Check your connection and try again.';
+        } finally {
+            signoutConfirm.disabled = false;
+        }
     });
 
     document.getElementById('change-password-link').addEventListener('click', () => {

@@ -31,6 +31,7 @@
             if (!response.ok) return undefined;
             const data = await response.json();
             sessionStorage.setItem('dietnerd_user', data.email);
+            window.DietNerdAPI.sessionExpiresInSeconds = data.session_expires_in_seconds;
             return data.email;
         } catch (e) {
             return undefined; // server unreachable

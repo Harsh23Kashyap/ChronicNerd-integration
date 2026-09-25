@@ -23,7 +23,7 @@ from typing import Optional
 import bcrypt
 
 SESSION_COOKIE = "dietnerd_session"
-SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_HOURS", "168")) * 3600
+SESSION_TTL_SECONDS = 14 * 24 * 3600  # Absolute lifetime from creation, not sliding.
 RESET_TTL_SECONDS = int(os.getenv("RESET_TTL_MINUTES", "30")) * 60
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_BYTES = 72  # bcrypt only uses the first 72 bytes

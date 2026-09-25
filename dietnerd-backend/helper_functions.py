@@ -1386,8 +1386,6 @@ def concurrent_article_processing(articles_to_process):
           try:
               result = future.result()
               relevant_article_summaries.append(result)
-              print(result)
-              print('-----------------------------------------------------------')
           except Exception as e:
               print("Error processing article (details suppressed)")
   return relevant_article_summaries
@@ -1988,7 +1986,7 @@ def generate_standalone_question(raw_question: str, session_memory: list) -> str
     temperature=0
   )
   standalone_q = response.choices[0].message.content.strip()
-  print(f"[STANDALONE QUESTION] previous={previous_questions} | has_previous_answer={bool(previous_answer)} | raw='{raw_question}' | standalone='{standalone_q}'")
+  print("[STANDALONE QUESTION] follow-up resolved")
   return standalone_q
 
 
@@ -2102,11 +2100,11 @@ def get_relevant_session_context(standalone_question: str, session_memory: list)
     futures = [executor.submit(_check_entry_relevance, entry, standalone_question) for entry in session_memory]
     for future in as_completed(futures):
       entry, is_relevant = future.result()
-      print(f"[CONTEXT RELEVANCE] Q: '{entry['raw_question']}' | relevant={is_relevant}")
+      print(f"[CONTEXT RELEVANCE] relevant={is_relevant}")
       if is_relevant:
         relevant.append(entry)
 
-  print(f"[CONTEXT RELEVANCE] {len(relevant)}/{len(session_memory)} entries selected as relevant for: '{standalone_question}'")
+  print(f"[CONTEXT RELEVANCE] {len(relevant)}/{len(session_memory)} entries selected")
   return relevant
 
 

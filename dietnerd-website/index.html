@@ -22,7 +22,7 @@
         <a href="about.html">About</a>
         <a href="contact.html">Contact</a>
         <div class="account-menu">
-            <button type="button" id="account-button" aria-haspopup="true" aria-expanded="false"><span id="account-email">Account</span></button>
+            <button type="button" id="account-button" aria-haspopup="true" aria-expanded="false"><span id="account-email">Account</span></button><span id="session-countdown" role="status" aria-live="off" title="Time until automatic sign-out" hidden></span>
             <div id="account-dropdown" class="account-dropdown" hidden>
                 <a href="addons.html" class="account-menu-link">Research add-ons</a>
                 <button type="button" id="change-password-link">Change password</button>
@@ -30,6 +30,15 @@
             </div>
         </div>
     </div>
+    <dialog id="signout-dialog" class="settings-dialog signout-dialog" aria-labelledby="signout-title" aria-describedby="signout-description">
+        <h2 id="signout-title">Sign out?</h2>
+        <p id="signout-description">You will need your password to sign in again.</p>
+        <p id="signout-error" class="dialog-error" role="alert"></p>
+        <div class="dialog-actions">
+            <button type="button" id="signout-cancel" class="secondary-button">Stay signed in</button>
+            <button type="button" id="signout-confirm" class="primary-button">Sign out</button>
+        </div>
+    </dialog>
     <dialog id="change-password-dialog" class="settings-dialog">
         <form id="change-password-form" method="dialog" novalidate>
             <h2>Change password</h2>
@@ -55,7 +64,7 @@
     <div id="container">
         <main class="chat-shell">
             <aside class="chat-sidebar" aria-label="Conversations">
-                <div class="sidebar-heading"><span>Conversations</span><button type="button" id="new-conversation" class="icon-button" aria-label="New conversation" title="New conversation">+</button></div>
+                <div class="sidebar-heading"><span>Conversations</span><button type="button" id="new-conversation" class="icon-button" aria-label="New conversation" title="New conversation">+</button><button type="button" id="temporary-chat" class="temporary-chat-button" aria-pressed="false" title="Temporary chat, not saved">Temporary</button></div>
                 <label for="conversation-select" class="visually-hidden">Choose conversation</label>
                 <select id="conversation-select" class="visually-hidden" aria-label="Choose conversation"><option value="">New conversation</option></select>
                 <button type="button" id="history-toggle" class="history-toggle" aria-expanded="false" aria-controls="conversation-list">Chat history ▾</button>
@@ -83,7 +92,7 @@
                     <div id="existing-attachments" class="existing-attachments"></div>
                     <div class="composer">
                         <input type="file" id="attachment-file" accept=".pdf,.txt,.csv" class="visually-hidden">
-                        <button type="button" id="attach-button" onclick="document.getElementById('attachment-file').click()" aria-label="Attach a file">＋</button>
+                        <button type="button" id="attach-button" title="Attach a file" onclick="document.getElementById('attachment-file').click()" aria-label="Attach a file">＋</button>
                         <label for="question" class="visually-hidden">Message DietNerd</label>
                         <textarea id="question" rows="1" placeholder="Message DietNerd..."></textarea>
                         <button id="submit" aria-label="Send message">↑</button>

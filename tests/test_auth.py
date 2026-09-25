@@ -59,7 +59,8 @@ class AuthTest(unittest.TestCase):
         stored = _db("SELECT password FROM users WHERE email = %s", (A,))[0][0]
         self.assertTrue(stored.startswith("$2"))
         self.assertNotIn(PASSWORD, stored)
-        self.assertEqual(c.get("/me").json(), {"email": A})
+        self.assertEqual(c.get("/me").json()["email"], A)
+        self.assertGreater(c.get("/me").json()["session_expires_in_seconds"], 13 * 86400)
         cookie = c.cookies.get(main.auth.SESSION_COOKIE)
         self.assertTrue(cookie)
         # Only the digest of the session token is stored.
@@ -125,11 +126,26 @@ class AuthTest(unittest.TestCase):
         _db("UPDATE user_sessions SET expires_at = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 MINUTE) WHERE email = %s", (A,))
         self.assertEqual(c.get("/me").status_code, 401)
 
+    def test_session_absolute_lifetime_does_not_extend_old_rows(self):
+        c = self.register(A)
+        _db("UPDATE user_sessions SET created_at = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 15 DAY), "
+            "expires_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1 DAY) WHERE email = %s", (A,))
+        self.assertEqual(c.get("/me").status_code, 401)
+
+    def test_old_seven_day_expiry_remains_effective(self):
+        c = self.register(A)
+        _db("UPDATE user_sessions SET expires_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL 2 DAY) "
+            "WHERE email = %s", (A,))
+        remaining = c.get("/me").json()["session_expires_in_seconds"]
+        self.assertGreater(remaining, 2 * 86400 - 10)
+        self.assertLessEqual(remaining, 2 * 86400)
+
     def test_bearer_token_works_for_api_clients(self):
         c = self.register(A)
         token = c.cookies.get(main.auth.SESSION_COOKIE)
         r = self.client().get("/me", headers={"Authorization": f"Bearer {token}"})
-        self.assertEqual(r.json(), {"email": A})
+        self.assertEqual(r.json()["email"], A)
+        self.assertGreater(r.json()["session_expires_in_seconds"], 13 * 86400)
 
     # --- route protection ---------------------------------------------------------
     def test_every_user_route_requires_a_session(self):
@@ -206,48 +222,7 @@ class AuthTest(unittest.TestCase):
         self.assertEqual(path_name.status_code, 200)
         self.assertEqual(a.get("/list_attachments").json()["documents"], ["notes.txt"])
 
-    # --- password reset and change -------------------------------------------------
-    def _request_reset(self, email):
-        sent = {}
-        with patch.object(main.auth, "send_reset_email", lambda to, url: sent.update(to=to, url=url)):
-            r = self.client().post("/forgot_password", json={"email": email}, headers={"Origin": "http://localhost:8080"})
-        self.assertEqual(r.status_code, 200)
-        return r, sent
-
-    def test_forgot_password_reply_is_the_same_for_unknown_emails(self):
-        self.register(A)
-        known, sent = self._request_reset(A)
-        unknown, sent_unknown = self._request_reset("nobody@example.com")
-        self.assertEqual(known.json(), unknown.json())
-        self.assertEqual(sent["to"], A)
-        self.assertEqual(sent_unknown, {})
-        self.assertTrue(sent["url"].startswith("http://localhost:8080/login.html#reset_token="))
-
-    def test_reset_password_flow(self):
-        old_session = self.register(A)
-        _, sent = self._request_reset(A)
-        token = sent["url"].split("reset_token=")[1]
-        self.assertEqual(self.client().post("/reset_password", json={"token": token, "password": "short"}).status_code, 400)
-        done = self.client().post("/reset_password", json={"token": token, "password": "brand new pass"})
-        self.assertEqual(done.status_code, 200, done.text)
-        # Old sessions are signed out, the old password stops working, the new one works.
-        self.assertEqual(old_session.get("/me").status_code, 401)
-        self.assertEqual(self.client().post("/login", json={"email": A, "password": PASSWORD}).status_code, 401)
-        self.assertEqual(self.client().post("/login", json={"email": A, "password": "brand new pass"}).status_code, 200)
-        # The link only works once.
-        reuse = self.client().post("/reset_password", json={"token": token, "password": "another new pass"})
-        self.assertEqual(reuse.status_code, 400)
-
-    def test_reset_link_expires_and_newer_link_replaces_older(self):
-        self.register(A)
-        _, first = self._request_reset(A)
-        _, second = self._request_reset(A)
-        first_token = first["url"].split("reset_token=")[1]
-        second_token = second["url"].split("reset_token=")[1]
-        self.assertEqual(self.client().post("/reset_password", json={"token": first_token, "password": "brand new pass"}).status_code, 400)
-        _db("UPDATE password_resets SET expires_at = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 MINUTE) WHERE email = %s", (A,))
-        self.assertEqual(self.client().post("/reset_password", json={"token": second_token, "password": "brand new pass"}).status_code, 400)
-
+    # --- password changes -------------------------------------------------------
     def test_change_password_keeps_this_session_and_signs_out_others(self):
         here = self.register(A)
         elsewhere = self.client()
