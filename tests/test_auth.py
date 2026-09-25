@@ -190,7 +190,9 @@ class AuthTest(unittest.TestCase):
         request_id = started["request_id"]
         self.assertEqual(b.get("/sse", params={"request_id": request_id}).status_code, 404)
         self.assertEqual(a.get("/sse", params={"request_id": "made-up"}).status_code, 404)
-        main.update_queues.pop(request_id, None)
+        main.request_events.pop(request_id, None)
+        main.request_updated_at.pop(request_id, None)
+        main.request_created_at.pop(request_id, None)
         main.request_owners.pop(request_id, None)
 
     def test_upload_limits(self):

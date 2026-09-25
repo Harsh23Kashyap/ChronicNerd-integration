@@ -69,7 +69,7 @@ class FrontendUntrustedContentTests(unittest.TestCase):
         self.assertIn("let formattedText = escapeHtml(input)", FRONT)
 
     def test_attachment_names_are_built_with_text_nodes(self):
-        self.assertIn("existingAttachmentsElement.replaceChildren()", FRONT)
-        self.assertIn("document.createTextNode(name)", FRONT)
+        self.assertIn("existingAttachmentsElement.replaceChildren(...documentNames.map(name => renderAttachmentChip(name)))", FRONT)
+        self.assertIn("filename.textContent = name", FRONT)
         self.assertIn("removeButton.dataset.filename = name", FRONT)
         self.assertNotIn("${name}\\n                <button", FRONT)

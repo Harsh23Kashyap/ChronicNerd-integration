@@ -31,11 +31,20 @@ import subprocess
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-from collections import defaultdict
+import threading
+import time
+from contextvars import copy_context
 
 logging.basicConfig(level=logging.INFO)
 
-update_queues = defaultdict(asyncio.Queue)
+request_events = {}
+request_event_base = {}  # First retained sequence number per request.
+request_updated_at = {}
+request_created_at = {}
+request_event_lock = threading.Lock()
+EVENT_RETENTION_SECONDS = 600
+MAX_PROGRESS_EVENTS = 80
+MAX_ACTIVE_REQUESTS = 64
 
 app = FastAPI()
 
@@ -559,6 +568,7 @@ async def cached_answer(query: QueryModel, email: str = Depends(current_user)):
         cached_answer_text,
     )
     set_conversation_summary(query.email, conversation_id, summary)
+    threading.Thread(target=update_conversation_title, args=(query.email, conversation_id), daemon=True).start()
     return {
         "cached_payload": cached_payload,
         "conversation_id": conversation_id,
@@ -802,33 +812,80 @@ async def process_query(background_tasks: BackgroundTasks, query: QueryModel, re
     conversation_id = query.conversation_id
     if conversation_id and not conversation_belongs_to(query.email, conversation_id):
         raise HTTPException(status_code=404, detail="Conversation not found.")
+    with request_event_lock:
+        _prune_request_events()
+        active_count = sum(not (events and isinstance(events[-1], dict) and 'end_output' in events[-1])
+                           for events in request_events.values())
+        if active_count >= MAX_ACTIVE_REQUESTS:
+            raise HTTPException(status_code=503, detail="Research is busy. Please try again shortly.")
+        if len(request_events) >= MAX_ACTIVE_REQUESTS * 4:
+            completed_ids = [rid for rid, events in request_events.items()
+                             if events and isinstance(events[-1], dict) and 'end_output' in events[-1]]
+            for rid in sorted(completed_ids, key=lambda r: request_updated_at.get(r, 0))[:MAX_ACTIVE_REQUESTS]:
+                request_events.pop(rid, None)
+                request_event_base.pop(rid, None)
+                request_updated_at.pop(rid, None)
+                request_created_at.pop(rid, None)
+                request_owners.pop(rid, None)
+        request_events[request_id] = []
+        request_event_base[request_id] = 0
+        request_updated_at[request_id] = time.monotonic()
+        request_created_at[request_id] = time.monotonic()
+        request_owners[request_id] = email
     if not conversation_id:
-        conversation_id = create_conversation(query.email, query.user_query[:120])
-    update_queues[request_id]
-    request_owners[request_id] = email
+        try:
+            conversation_id = create_conversation(query.email, query.user_query[:120])
+        except Exception:
+            with request_event_lock:
+                request_events.pop(request_id, None)
+                request_event_base.pop(request_id, None)
+                request_updated_at.pop(request_id, None)
+                request_created_at.pop(request_id, None)
+                request_owners.pop(request_id, None)
+            raise
     background_tasks.add_task(_run_research_with_key, query.user_query, request_id, query.email, conversation_id, auth.token_digest(token) if key else None)
     return JSONResponse({"request_id": request_id, "conversation_id": conversation_id})
+
+def _prune_request_events():
+    """Caller holds request_event_lock. Keep finished events ten minutes for reconnects."""
+    now = time.monotonic()
+    for rid, seen in list(request_updated_at.items()):
+        created = request_created_at.get(rid, seen)
+        events = request_events.get(rid, [])
+        completed = bool(events and isinstance(events[-1], dict) and 'end_output' in events[-1])
+        if (completed and now - seen > EVENT_RETENTION_SECONDS) or now - created > 3600:
+            request_updated_at.pop(rid, None)
+            request_created_at.pop(rid, None)
+            request_events.pop(rid, None)
+            request_event_base.pop(rid, None)
+            request_owners.pop(rid, None)
+
 
 @app.get("/sse")
 async def sse(request_id: str = Query(default=None), email: str = Depends(current_user)):
     if not request_id:
         raise HTTPException(status_code=400, detail="request_id is required")
-    if request_owners.get(request_id) != email:
-        raise HTTPException(status_code=404, detail="Request not found.")
+    with request_event_lock:
+        if request_owners.get(request_id) != email or request_id not in request_events:
+            raise HTTPException(status_code=404, detail="Request not found.")
     return EventSourceResponse(event_generator(request_id))
 
+
 async def event_generator(request_id: str):
-    queue = update_queues[request_id]
-    try:
-        while True:
-            data = await queue.get()
-            if isinstance(data, dict) and "end_output" in data:
-                yield {"event": "message", "data": json.dumps({"update": data})}
+    cursor = 0
+    while True:
+        with request_event_lock:
+            events = request_events.get(request_id)
+            if events is None:
                 break
+            base = request_event_base.get(request_id, 0)
+            batch = events[max(0, cursor - base):]
+            cursor = base + len(events)
+        for data in batch:
             yield {"event": "message", "data": json.dumps({"update": data})}
-    finally:
-        update_queues.pop(request_id, None)
-        request_owners.pop(request_id, None)
+            if isinstance(data, dict) and "end_output" in data:
+                return
+        await asyncio.sleep(0.25)
 
 def check_attachment_exists(email: str):
     connection = _get_db_connection()
@@ -852,7 +909,14 @@ def get_user_documents(email: str):
 def _run_research_with_key(user_query, request_id, email, conversation_id, token_hash):
     scope = byok.activate(token_hash, email) if token_hash else None
     try:
-        return process_user_query(user_query, request_id, email, conversation_id)
+        result = process_user_query(user_query, request_id, email, conversation_id)
+        scope_context = copy_context()
+        threading.Thread(
+            target=scope_context.run,
+            args=(update_conversation_title, email, conversation_id),
+            daemon=True,
+        ).start()
+        return result
     except Exception as exc:
         # Log only the exception class and numeric provider status. Exception
         # messages may echo request headers or other sensitive content.
@@ -871,6 +935,63 @@ def _run_research_with_key(user_query, request_id, email, conversation_id, token
     finally:
         if scope is not None:
             byok.reset(scope)
+
+def update_conversation_title(email: str, conversation_id: str):
+    """Short title from saved turns. Failure is non-fatal and never affects research."""
+    try:
+        turns = get_session_memory(email, conversation_id)
+        if not turns:
+            return
+        latest_turn = turns[-1].get("query_number")
+        conversation_text = "\n".join(
+            f"Q: {t.get('raw_question', '')[:250]}\nA: {t.get('answer', '')[:300]}"
+            for t in turns[-4:]
+        )[:2600]
+        response = client.chat.completions.create(
+            model="gpt-4-turbo",
+            messages=[
+                {"role": "system", "content": (
+                    "Give this research conversation a short, distinct title of 2 to 6 words. "
+                    "Describe its actual topic, not the user's wording. Return only a title, no quotes. "
+                    "Do not include health identifiers, email addresses or names."
+                )},
+                {"role": "user", "content": conversation_text},
+            ],
+            temperature=0.2,
+        )
+        title = (response.choices[0].message.content or '').strip().strip('"')[:80]
+        if not title or '\n' in title or len(title.split()) > 8:
+            return
+        connection = _get_db_connection()
+        try:
+            cursor = connection.cursor()
+            cursor.execute(
+                "UPDATE conversations SET title = %s WHERE email = %s AND conversation_id = %s AND next_query_number = %s",
+                (title, email, conversation_id, latest_turn + 1),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+    except Exception as exc:
+        logging.warning("Conversation title update failed: %s", type(exc).__name__)
+
+
+def _send_article_titles(request_id: str, articles: list, stage: str):
+    """Display real retrieved titles, never synthetic or claimed citation support."""
+    titles = []
+    for article in articles:
+        medline = article.get('MedlineCitation', {}).get('Article', {}) if isinstance(article, dict) else {}
+        title = (article.get('title') or medline.get('ArticleTitle')) if isinstance(article, dict) else None
+        if isinstance(title, str) and title.strip() and title.strip() not in titles:
+            titles.append(title.strip()[:180])
+        if len(titles) >= 5:
+            break
+    if titles:
+        loop.run_until_complete(send_update(request_id, {
+            'stage': stage, 'article_titles': titles, 'count_shown': len(titles),
+            'note': 'Retrieved titles, not verified support for the answer.'
+        }))
+
 
 def process_user_query(user_query, request_id, email, conversation_id):
     session_memory = get_session_memory(email, conversation_id)
@@ -943,6 +1064,7 @@ def process_user_query(user_query, request_id, email, conversation_id):
 
     print("Retrieved Articles")
     loop.run_until_complete(send_update(request_id, f"Retrieved {len(deduplicated_articles_collected)} Articles..."))
+    _send_article_titles(request_id, deduplicated_articles_collected, "retrieved")
     # Relevance Classifier
     start_relevant = time.time()
     relevant_articles, irrelevant_articles = concurrent_relevance_classification(deduplicated_articles_collected, pipeline_query)
@@ -950,6 +1072,7 @@ def process_user_query(user_query, request_id, email, conversation_id):
 
     print("relevant articles")
     loop.run_until_complete(send_update(request_id, f"Classified {len(relevant_articles)} Relevant Articles..."))
+    _send_article_titles(request_id, relevant_articles, "relevant")
 
     # Article Match
     start_processing = time.time()
@@ -1049,8 +1172,16 @@ def process_user_query(user_query, request_id, email, conversation_id):
     return return_obj
 
 async def send_update(request_id, data):
-    if request_id in update_queues:
-        await update_queues[request_id].put(data)
+    with request_event_lock:
+        if request_id not in request_events:
+            return
+        events = request_events[request_id]
+        events.append(data)
+        if len(events) > MAX_PROGRESS_EVENTS + 1:
+            trimmed = len(events) - MAX_PROGRESS_EVENTS - 1
+            del events[:trimmed]
+            request_event_base[request_id] = request_event_base.get(request_id, 0) + trimmed
+        request_updated_at[request_id] = time.monotonic()
 
 async def query_db_final(query: str):
    mydb = _get_db_connection()
