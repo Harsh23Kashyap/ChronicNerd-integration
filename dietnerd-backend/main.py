@@ -568,6 +568,7 @@ async def cached_answer(query: QueryModel, email: str = Depends(current_user)):
         cached_answer_text,
     )
     set_conversation_summary(query.email, conversation_id, summary)
+    logging.info("Conversation title job queued (cache hit)")
     threading.Thread(target=update_conversation_title, args=(query.email, conversation_id), daemon=True).start()
     return {
         "cached_payload": cached_payload,
@@ -925,6 +926,7 @@ def _run_research_with_key(user_query, request_id, email, conversation_id, token
     scope = byok.activate(token_hash, email) if token_hash else None
     try:
         result = process_user_query(user_query, request_id, email, conversation_id)
+        logging.info("Conversation title job queued")
         scope_context = copy_context()
         threading.Thread(
             target=scope_context.run,
@@ -952,14 +954,16 @@ def _run_research_with_key(user_query, request_id, email, conversation_id, token
             byok.reset(scope)
 
 def update_conversation_title(email: str, conversation_id: str):
-    """Short title from saved turns. Failure is non-fatal and never affects research."""
+    """Generate a short topic title from this owner's saved conversation turns."""
     try:
+        logging.info("Conversation title job started")
         turns = get_session_memory(email, conversation_id)
         if not turns:
+            logging.warning("Conversation title job skipped: no saved turns")
             return
         latest_turn = turns[-1].get("query_number")
         conversation_text = "\n".join(
-            f"Q: {t.get('raw_question', '')[:250]}\nA: {t.get('answer', '')[:300]}"
+            f"Q: {str(t.get('raw_question') or '')[:250]}\nA: {str(t.get('answer') or '')[:300]}"
             for t in turns[-4:]
         )[:2600]
         response = client.chat.completions.create(
@@ -976,15 +980,27 @@ def update_conversation_title(email: str, conversation_id: str):
         )
         title = (response.choices[0].message.content or '').strip().strip('"')[:80]
         if not title or '\n' in title or len(title.split()) > 8:
+            logging.warning("Conversation title rejected: malformed model response")
             return
         connection = _get_db_connection()
         try:
             cursor = connection.cursor()
             cursor.execute(
+                "SELECT title FROM conversations WHERE email = %s AND conversation_id <> %s AND title = %s LIMIT 1",
+                (email, conversation_id, title),
+            )
+            if cursor.fetchone():
+                title = f"{title[:70]} {conversation_id[:4]}"
+            cursor.execute(
                 "UPDATE conversations SET title = %s WHERE email = %s AND conversation_id = %s AND next_query_number = %s",
                 (title, email, conversation_id, latest_turn + 1),
             )
+            affected = cursor.rowcount
             connection.commit()
+            if not affected:
+                logging.warning("Conversation title skipped: no matching unchanged thread")
+            else:
+                logging.info("Conversation title saved")
         finally:
             connection.close()
     except Exception as exc:

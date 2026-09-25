@@ -127,6 +127,7 @@ def test_article_title_progress_uses_actual_retrieved_titles():
 def test_title_is_thread_scoped_and_stale_generation_cannot_overwrite():
     turns = [{'query_number': 2, 'raw_question': 'Zinc and sleep?', 'answer': 'Small trials.'}]
     cursor = MagicMock()
+    cursor.fetchone.return_value = None
     db = MagicMock()
     db.cursor.return_value = cursor
     llm = MagicMock()

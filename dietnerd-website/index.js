@@ -957,6 +957,7 @@ async function generateAnswer(question) {
         const result = await runGeneration(question, pending);
         pending.remove();
         showAssistantAnswer(result.end_output, result.evidence_ledger || [], question);
+        refreshConversationList().catch(() => {});
     } catch (err) {
         console.error(err);
         pending.fail(`${err.message || 'Something went wrong.'} Please try again.`, () => generateAnswer(question));
@@ -973,6 +974,7 @@ async function answerFromAttachment(question) {
         const result = await runGeneration(question, pending);
         pending.remove();
         showAssistantAnswer(result.end_output, result.evidence_ledger || [], question);
+        refreshConversationList().catch(() => {});
     } catch (err) {
         console.error(err);
         pending.fail(`${err.message || 'Something went wrong.'} Please try again.`, () => answerFromAttachment(question));
@@ -1070,6 +1072,7 @@ document.getElementById('submit').addEventListener('click', async () => {
     if (cachedAnswer) {
         setComposerBusy(false);
         showAssistantAnswer(cachedAnswer, [], question);
+        refreshConversationList().catch(() => {});
         return;
     }
 
