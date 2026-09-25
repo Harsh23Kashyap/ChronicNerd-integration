@@ -51,6 +51,8 @@ function openSourcesPanel(sourceCards) {
             link.rel = 'noopener noreferrer';
             link.textContent = 'Open original in new tab ↗';
             card.append(link);
+            card.classList.add('linked-source');
+            card.addEventListener('click', event => { if (!event.target.closest('a')) link.click(); });
         }
         content.append(card);
     });
@@ -64,7 +66,20 @@ function splitReferenceSection(answer) {
         : { body: String(answer), references: '' };
 }
 
-function sourcesForAnswer(answer) {
+function sourceLink(citation, metadata) {
+    const explicit = metadata && typeof metadata.URL === 'string' ? metadata.URL.trim() : '';
+    if (/^https:\/\//i.test(explicit)) return explicit;
+    const pmid = String(metadata?.PMID || '').trim();
+    if (/^\d{1,12}$/.test(pmid)) return `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`;
+    const citationPmid = String(citation).match(/\bPMID\s*:\s*(\d{1,12})\b/i);
+    if (citationPmid) return `https://pubmed.ncbi.nlm.nih.gov/${citationPmid[1]}/`;
+    const match = String(citation).match(/(?:doi\s*:\s*|https?:\/\/(?:dx\.)?doi\.org\/|\b)(10\.\d{4,9}\/[^\s,;<>]+)/i);
+    if (!match) return '';
+    const doi = match[1].replace(/[.)\]]+$/, '');
+    return `https://doi.org/${encodeURI(doi)}`;
+}
+
+function sourcesForAnswer(answer, ledger = []) {
     let objects = {};
     try { objects = JSON.parse(localStorage.getItem('referenceObject') || '{}') || {}; } catch { /* citations still render */ }
     const {references} = splitReferenceSection(answer);
@@ -73,11 +88,23 @@ function sourcesForAnswer(answer) {
         const match = line.trim().match(/^(?:\[(\d+)\]|(\d+)\.)\s*(.+)/s);
         if (!match) return [];
         const number = Number(match[1] || match[2]);
-        const title = match[3].split(/\n(?=\s*(?:DietNerd|ChronicNerd) is\b)/i)[0].trim().slice(0, 240);
+        const citation = match[3].split(/\n(?=\s*(?:DietNerd|ChronicNerd) is\b)/i)[0].trim();
+        const title = citation.slice(0, 240);
         if (!title) return [];
-        const normalized = value => String(value).replace(/^\s*(?:\[\d+\]|\d+\.)\s*/, '').trim().replace(/\s+/g,' ').toLowerCase();
-        const metadata = Object.entries(objects).find(([citation]) => normalized(citation) === normalized(line.split('\n')[0]));
-        return [{number, title, url: metadata && typeof metadata[1]?.URL === 'string' ? metadata[1].URL : ''}];
+        const marker = key => String(key).match(/^\s*(?:\[(\d+)\]|(\d+)\.)/);
+        const normalize = value => String(value).replace(/^\s*(?:\[\d+\]|\d+\.)\s*/, '').replace(/\s+/g, ' ').trim().toLowerCase();
+        const metadata = Object.entries(objects).find(([key]) => {
+            const match = marker(key);
+            const expected = normalize(key);
+            const actual = normalize(citation);
+            return match && Number(match[1] || match[2]) === number &&
+                (actual.includes(expected) || expected.includes(actual)) && Math.min(actual.length, expected.length) > 24;
+        });
+        const ledgerUrl = (Array.isArray(ledger) ? ledger : []).find(row => row?.citation_marker === `[${number}]`)?.source_url;
+        const matchUrl = metadata?.[1]?.URL;
+        const url = (/^https:\/\//i.test(matchUrl || '') ? matchUrl : '') ||
+            (/^https:\/\//i.test(ledgerUrl || '') ? ledgerUrl : '') || sourceLink(citation, metadata?.[1]);
+        return [{number, title, url}];
     });
     return [...new Map(fromAnswer.map(source => [source.number, source])).values()].sort((a,b)=>a.number-b.number);
 }
@@ -98,7 +125,13 @@ function appendInChatSources(content, sources) {
         const title = document.createElement('span');
         title.textContent = source.title;
         row.append(number, title);
-        row.addEventListener('click', () => openSourcesPanel(sources));
+        row.addEventListener('click', () => {
+            openSourcesPanel(sources);
+            if (source.url) {
+                const card = Array.from(document.querySelectorAll('.source-card')).find(item => item.querySelector('.sources-kicker')?.textContent === `Reference ${source.number}`);
+                card?.scrollIntoView({block:'nearest',behavior:'smooth'});
+            }
+        });
         section.append(row);
     });
     content.append(section);
@@ -168,6 +201,15 @@ async function refreshConversationList() {
     }
 }
 
+function refreshTitleAfterAnswer(conversationId) {
+    if (!conversationId) return;
+    [1500, 4000, 9000, 18000].forEach(delay => {
+        window.setTimeout(() => {
+            if (getConversationId() === conversationId) refreshConversationList().catch(() => {});
+        }, delay);
+    });
+}
+
 let conversationLoadToken = 0;
 async function renderSelectedConversation(conversationId) {
     if (!conversationId) return;
@@ -186,9 +228,10 @@ async function renderSelectedConversation(conversationId) {
         clearChatThread();
         entries.forEach((entry) => {
             appendChatMessage('user', entry.raw_question || '');
-            const content = appendChatMessage('assistant', entry.answer || '', sourcesForAnswer(entry.answer || ''));
+            const content = appendChatMessage('assistant', entry.answer || '', sourcesForAnswer(entry.answer || '', entry.evidence_ledger || []));
             appendEvidenceLedger(content, entry.evidence_ledger || []);
         });
+        document.getElementById('generate-pdf-button').classList.toggle('hidden', !entries.length);
         if (!entries.length) thread.innerHTML = '<div class="history-loading empty-history">This conversation has no completed answers yet.</div>';
         document.getElementById('question').value = '';
     } catch (err) {
@@ -254,9 +297,10 @@ const getAnswer = async (question) => {
         sessionStorage.setItem('dietnerd_conversation_id', result.conversation_id);
         await refreshConversationList();
         const cached = JSON.parse(result.cached_payload);
-        localStorage.setItem('referenceObject', JSON.stringify(cached.citations_obj || {}));
-        localStorage.setItem('citations', JSON.stringify(cached.citations || []));
-        localStorage.setItem('allArticles', JSON.stringify(cached.relevant_articles || cached.relevent_articles || []));
+        try {
+            localStorage.setItem('referenceObject', JSON.stringify(cached.citations_obj || {}));
+            localStorage.setItem('citations', JSON.stringify(cached.citations || []));
+        } catch { /* answer still renders when browser storage is full */ }
         return cached.end_output.replace(/(^|\n)(\d+)\.\s/g, '\n\n$2. ');
     } catch (err) {
         console.error('Fetch error:', err);
@@ -503,136 +547,63 @@ const formatText = (input,disclaimer) => {
 /**
  * Generates a PDF document based on the formatted text content.
  */
-const generatePDF = () => {
-    const question = document.getElementById('question').value.trim();
-    const script = document.createElement('script');
-    const text = localStorage.getItem("rawOutput");
-    const citationObj = JSON.parse(localStorage.getItem('referenceObject'));
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-    document.body.appendChild(script);
-
-    script.onload = function() {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-
-        const lineHeight = 7;
-        let y = 20;
-        const listItemIndent = 10;
-        const maxWidth = 180;
-        const pageHeight = doc.internal.pageSize.height;
-
-        // Function to add formatted text with word wrap
-        const addFormattedText = (text, startX, fontSize = 12) => {
-            let x = startX;
-            const lines = text.split('\n');
-
-            lines.forEach(line => {
-                x = startX;
-                const isListItem = line.trim().startsWith('-');
-                if (isListItem) {
-                    x += listItemIndent;
-                    line = line.substring(line.indexOf('-') + 1).trim();
-                    doc.setFont("helvetica", "normal");
-                    doc.setFontSize(fontSize);
-                    doc.text('•', startX, y);
-                }
-
-                const parts = line.split(/(\*\*.*?\*\*)/);
-
-                parts.forEach(part => {
-                    if (part.startsWith('**') && part.endsWith('**')) {
-                        doc.setFont("helvetica", "bold");
-                        part = part.slice(2, -2);
-                    } else {
-                        doc.setFont("helvetica", "normal");
-                    }
-
-                    doc.setFontSize(fontSize);
-                    const words = part.split(' ');
-                    let currentLine = '';
-
-                    words.forEach(word => {
-                        const testLine = currentLine + (currentLine ? ' ' : '') + word;
-                        const testWidth = doc.getTextWidth(testLine);
-
-                        if (testWidth > maxWidth - x + 15) {
-                            if (y > pageHeight - 20) {
-                                doc.addPage();
-                                y = 20;
-                            }
-                            doc.text(currentLine, x, y);
-                            y += lineHeight;
-                            currentLine = word;
-                            x = isListItem ? startX + listItemIndent : startX;
-                        } else {
-                            currentLine = testLine;
-                        }
-                    });
-
-                    if (currentLine) {
-                        if (y > pageHeight - 20) {
-                            doc.addPage();
-                            y = 20;
-                        }
-                        doc.text(currentLine, x, y);
-                        x += doc.getTextWidth(currentLine) + 1;
-                    }
-                });
-
-                y += lineHeight;
-                if (y > pageHeight - 20) {
-                    doc.addPage();
-                    y = 20;
-                }
-            });
+const generatePDF = async () => {
+    const id = getConversationId();
+    const button = document.getElementById('generate-pdf-button');
+    const oldLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Preparing PDF...';
+    try {
+        if (!window.jspdf?.jsPDF) throw new Error('PDF library unavailable. Try again after reconnecting.');
+        if (!id) throw new Error('Choose a saved conversation before downloading.');
+        const response = await apiFetch(`/session_memory?conversation_id=${encodeURIComponent(id)}`);
+        if (!response.ok) throw new Error(await DietNerdAPI.readError(response, 'Could not load the conversation for export.'));
+        const entries = (await response.json()).entries || [];
+        if (!entries.length) throw new Error('This conversation has no saved answers yet.');
+        const selected = Array.from(document.getElementById('conversation-select').options).find(option => option.value === id);
+        const title = selected?.textContent?.trim() || 'DietNerd conversation';
+        const filename = (title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim().replace(/\s+/g, ' ').slice(0, 90) || 'DietNerd conversation') + '.pdf';
+        const doc = new window.jspdf.jsPDF({unit:'mm',format:'a4'});
+        const width = doc.internal.pageSize.getWidth();
+        const height = doc.internal.pageSize.getHeight();
+        const margin = 18, contentWidth = width - 2 * margin;
+        let y = margin;
+        const pageIfNeeded = (lines = 1, leading = 6) => {
+            if (y + lines * leading > height - margin) { doc.addPage(); y = margin; }
         };
-
-        // Add the question as a title
-        doc.setFontSize(16);
-        doc.setFont("helvetica", "bold");
-        const titleLines = doc.splitTextToSize(question, maxWidth);
-        titleLines.forEach(line => {
-            doc.text(line, 15, y);
-            y += 10;
+        const write = (text, {size = 10, bold = false, leading = 6, indent = 0, gap = 0} = {}) => {
+            doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(size);
+            const lines = doc.splitTextToSize(String(text || ''), contentWidth - indent);
+            for (const line of lines) { pageIfNeeded(1, leading); doc.text(line, margin + indent, y); y += leading; }
+            y += gap;
+        };
+        write(title, {size:17,bold:true,leading:9,gap:7});
+        entries.forEach((entry, index) => {
+            pageIfNeeded(3);
+            write(`Question ${index + 1}`, {size:11,bold:true,leading:7});
+            write(entry.raw_question || 'Question unavailable', {size:11,leading:6,gap:4});
+            write('Answer', {size:11,bold:true,leading:7,gap:1});
+            String(entry.answer || '').split(/\r?\n/).forEach(raw => {
+                const line = raw.trim();
+                if (!line) { y += 2; return; }
+                const heading = line.match(/^#{1,6}\s+(.+)$/);
+                if (heading) { write(heading[1].replace(/\*\*/g,''), {size:11,bold:true,leading:7,gap:2}); return; }
+                const bullet = line.match(/^[-*]\s+(.+)$/);
+                if (bullet) { write('•  ' + bullet[1].replace(/\*\*/g,''), {indent:4,leading:6}); return; }
+                write(line.replace(/\*\*/g,''), {leading:6});
+            });
+            y += 9;
         });
-        y += 10;
-
-        // Add the main content
-        addFormattedText(text, 15);
-
-        // Add citation summaries
-        doc.addPage();
-        y = 20;
-        doc.setFontSize(16);
-        doc.setFont("helvetica", "bold");
-        doc.text("Citation Summaries", 15, y);
-        y += 20;
-
-        // `|| {}` guards the disabled localStorage block above — referenceObject is
-        // null while citations are turned off, and Object.entries(null) throws.
-        Object.entries(citationObj || {}).forEach(([citation, data], index) => {
-            if (index > 0) {  
-                doc.addPage();
-                y = 20;
-            }
-
-            addFormattedText(`**Citation:** ${citation}`, 15, 14);
-            y += lineHeight;
-            addFormattedText(`**Summary:**`, 15, 14);
-            y += lineHeight;
-            addFormattedText(data.Summary, 15);
-            y += lineHeight; 
-            addFormattedText(`**PMID:** ${data.PMID}`, 15);
-            y += lineHeight;
-            addFormattedText(`**PMCID:** ${data.PMCID}`, 15);
-            y += lineHeight;
-            addFormattedText(`**URL:** ${data.URL}`, 15);
-            y += lineHeight * 2;
-        });
-
-        doc.save("Dietnerd.pdf"); //ADD DATE AND TIME
-    };
+        write('DietNerd is an exploratory tool. Check important health information with a qualified professional.', {size:8,leading:5});
+        doc.save(filename);
+    } catch (error) {
+        document.querySelector('.hint').textContent = error.message || 'Could not prepare PDF.';
+    } finally {
+        button.disabled = false;
+        button.textContent = oldLabel;
+    }
 };
+
 /**
  * Runs the generation process for the given user query.
  *
@@ -856,8 +827,7 @@ function appendEvidenceLedger(content, ledger) {
 }
 
 function showAssistantAnswer(answer, ledger = [], question = '') {
-    localStorage.setItem('rawOutput', answer);
-    const content = appendChatMessage('assistant', answer, sourcesForAnswer(answer));
+    const content = appendChatMessage('assistant', answer, sourcesForAnswer(answer, ledger));
     appendEvidenceLedger(content, ledger);
     if (ChronicNerdAddons.enabled('notebook')) {
         const button = document.createElement('button');
@@ -928,7 +898,6 @@ async function runGeneration(userQuery, pending) {
                 try {
                     localStorage.setItem('referenceObject', JSON.stringify(message.update.citations_obj || {}));
                     localStorage.setItem('citations', JSON.stringify(message.update.citations || []));
-                    localStorage.setItem('allArticles', JSON.stringify(message.update.relevant_articles || []));
                 } catch (error) { console.warn('Could not save reference metadata locally.'); }
                 resolve(message.update);
             } else if (message.update.article_titles && pending) {
@@ -957,7 +926,7 @@ async function generateAnswer(question) {
         const result = await runGeneration(question, pending);
         pending.remove();
         showAssistantAnswer(result.end_output, result.evidence_ledger || [], question);
-        refreshConversationList().catch(() => {});
+        refreshTitleAfterAnswer(getConversationId());
     } catch (err) {
         console.error(err);
         pending.fail(`${err.message || 'Something went wrong.'} Please try again.`, () => generateAnswer(question));
@@ -974,7 +943,7 @@ async function answerFromAttachment(question) {
         const result = await runGeneration(question, pending);
         pending.remove();
         showAssistantAnswer(result.end_output, result.evidence_ledger || [], question);
-        refreshConversationList().catch(() => {});
+        refreshTitleAfterAnswer(getConversationId());
     } catch (err) {
         console.error(err);
         pending.fail(`${err.message || 'Something went wrong.'} Please try again.`, () => answerFromAttachment(question));
@@ -1011,7 +980,7 @@ function offerSimilarQuestions(question, similar) {
             button.addEventListener('click', () => {
                 container.style.display = 'none';
                 hintElement.textContent = '';
-                    const last = Array.from(document.querySelectorAll('#chat-thread .chat-message.user')).at(-1);
+                const last = Array.from(document.querySelectorAll('#chat-thread .chat-message.user')).at(-1);
                 if (last) last.remove();
                 selectedSuggestion = true;
                 document.getElementById('question').value = String(item[1]);
@@ -1072,7 +1041,7 @@ document.getElementById('submit').addEventListener('click', async () => {
     if (cachedAnswer) {
         setComposerBusy(false);
         showAssistantAnswer(cachedAnswer, [], question);
-        refreshConversationList().catch(() => {});
+        refreshTitleAfterAnswer(getConversationId());
         return;
     }
 

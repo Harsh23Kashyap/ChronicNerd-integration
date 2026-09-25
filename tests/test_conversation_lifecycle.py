@@ -52,7 +52,7 @@ class ConversationLifecycleContractTest(unittest.TestCase):
         self.assertIn('append_session_memory(', cached)
 
     def test_sse_final_payload_uses_the_frontend_envelope(self):
-        self.assertIn('json.dumps({"update": data})', MAIN)
+        self.assertIn('json.dumps({"update": data}, allow_nan=False)', MAIN)
         self.assertNotIn('"final_output" in data', MAIN)
 
     def test_clearing_memory_resets_query_number(self):

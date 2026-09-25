@@ -27,13 +27,20 @@
             return Array.isArray(entries) ? entries.filter(item => item && typeof item === 'object' && typeof item.id === 'string' && typeof item.answer === 'string' && typeof item.question === 'string') : [];
         } catch { return []; }
     }
+    function noteId() {
+        // randomUUID is unavailable on HTTP public IPs in Safari. getRandomValues
+        // supplies random bytes without requiring a secure context.
+        const bytes = new Uint8Array(16);
+        crypto.getRandomValues(bytes);
+        return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    }
     function saveNote(question, answer, sources) {
         if (!enabled('notebook')) throw new Error('Enable the notebook first.');
         const storageKey = key('notebook');
         const entries = notebook();
         // User click is required. Only the visible answer and resolved source links
         // are stored locally; no credentials, hidden document text or API payloads.
-        entries.unshift({id: crypto.randomUUID(), savedAt: new Date().toISOString(),
+        entries.unshift({id: noteId(), savedAt: new Date().toISOString(),
             question: String(question || '').slice(0, 2000),
             answer: String(answer || '').slice(0, 16000),
             sources: Array.isArray(sources) ? sources.filter(x => typeof x === 'string' && /^https:\/\//.test(x)).slice(0, 12) : []});
