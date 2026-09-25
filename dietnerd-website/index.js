@@ -824,30 +824,6 @@ function appendEvidenceLedger(content, ledger) {
 function showAssistantAnswer(answer, ledger = [], question = '', storedSources = null) {
     const content = appendChatMessage('assistant', answer, []);
     appendEvidenceLedger(content, ledger);
-    if (ChronicNerdAddons.enabled('notebook')) {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'addon-save-button';
-        button.textContent = 'Save to my notebook';
-        button.addEventListener('click', () => {
-            try {
-                ChronicNerdAddons.saveNote(question, answer, ledger.map(row => row.source_url));
-                button.textContent = 'Saved to notebook';
-                button.disabled = true;
-            } catch (error) {
-                console.error('Notebook save failed:', error);
-                const reason = error instanceof Error ? error.message : String(error);
-                button.textContent = 'Could not save locally';
-                button.title = `Notebook save failed: ${reason}`;
-                button.setAttribute('aria-label', `Could not save locally: ${reason}`);
-                const detail = document.createElement('small');
-                detail.className = 'notebook-save-error';
-                detail.textContent = reason;
-                button.after(detail);
-            }
-        });
-        content.append(button);
-    }
     appendInChatSources(content, sourcesForAnswer(answer, ledger, storedSources));
     document.getElementById('generate-pdf-button').classList.remove('hidden');
 }
@@ -1180,7 +1156,7 @@ document.getElementById('chat-thread').addEventListener('click', (event) => {
     input.dispatchEvent(new Event('input', { bubbles: true }));
     document.getElementById('submit').click();
 });
-for (const feature of ['ledger', 'notebook']) {
+for (const feature of ['ledger']) {
     const checkbox = document.getElementById(`sidebar-${feature}`);
     checkbox.checked = ChronicNerdAddons.enabled(feature);
     checkbox.addEventListener('change', () => {

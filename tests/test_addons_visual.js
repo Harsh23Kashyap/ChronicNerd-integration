@@ -8,40 +8,31 @@ const assert = require('assert');
   await page.route('**/conversations', r=>r.fulfill({status:200,contentType:'application/json',body:'{"conversations":[]}'}));
   await page.goto('http://127.0.0.1:18181/addons.html');
   await page.waitForSelector('body:not(.auth-pending)');
-  assert.equal(await page.locator('.addon-list .addon').count(),2);
+  assert.equal(await page.locator('.addon-list .addon').count(),1);
   assert.equal(await page.locator('.roadmap-grid article').count(),4);
   assert.equal(await page.locator('#toggle-ledger').isChecked(),false);
   await page.screenshot({path:'/downloads/chronicnerd-addons-overview.png',fullPage:true});
   await page.locator('#toggle-ledger').check();
-  await page.locator('#toggle-notebook').check();
   await page.reload();
   assert.equal(await page.locator('#toggle-ledger').isChecked(),true);
-  assert.equal(await page.locator('#toggle-notebook').isChecked(),true);
   await page.goto('http://127.0.0.1:18181/index.html');
   await page.waitForFunction(() => !document.documentElement.classList.contains('auth-pending'));
   await page.evaluate(() => showAssistantAnswer('What we know\nA result [1].\n\nWhat we don\'t know\nUncertain.\n\nWhat to ask a dietitian\nDoes it apply?', [
     {claim:'A result [1].',citation_marker:'[1]',source_title:'Sample Study',source_url:'https://pubmed.ncbi.nlm.nih.gov/123/',evidence_note:'Support not verified.'}
   ], 'What does the research say?'));
   assert.equal(await page.locator('.evidence-ledger').count(),1);
-  assert.equal(await page.locator('.addon-save-button').count(),1);
-  await page.locator('.addon-save-button').click();
-  assert.equal(await page.locator('.addon-save-button').textContent(),'Saved to notebook');
+  assert.equal(await page.locator('.addon-save-button,#sidebar-notebook').count(),0);
   await page.goto('http://127.0.0.1:18181/addons.html');
 
 
   await page.reload();
-  assert.equal(await page.locator('.note').count(),1);
-  assert.equal(await page.locator('.note a').count(),1);
-  // Settings and notebook must be isolated by signed-in account, not just origin.
+  assert.equal(await page.locator('#toggle-notebook,#notebook-section').count(),0);
+  // Settings remain isolated by signed-in account, not just origin.
   await page.evaluate(() => sessionStorage.setItem('dietnerd_user','other@example.invalid'));
   assert.equal(await page.evaluate(() => ChronicNerdAddons.enabled('ledger')), false);
-  assert.equal(await page.evaluate(() => ChronicNerdAddons.notebook().length), 0);
   await page.evaluate(() => sessionStorage.setItem('dietnerd_user','visual-test@example.invalid'));
 
-  await page.locator('.note button').click();
-  assert.equal(await page.locator('.note').count(),0);
   await page.locator('#toggle-ledger').uncheck();
-  await page.locator('#toggle-notebook').uncheck();
   await page.goto('http://127.0.0.1:18181/index.html');
   await page.waitForFunction(() => !document.documentElement.classList.contains('auth-pending'));
   await page.evaluate(() => showAssistantAnswer('What we know\nA result [1].', [
