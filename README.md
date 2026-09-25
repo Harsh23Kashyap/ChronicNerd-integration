@@ -1,85 +1,49 @@
-# DietNerd
+# ChronicNerd / DietNerd
 
-## About ChronicNerd
+ChronicNerd is a conversational diet and nutrition research app in the CustomNerd family. The current web UI and assistant are branded **DietNerd**. It helps a signed-in user explore published research, inspect linked sources, and continue questions within saved conversations. It is an exploratory tool, not a medical diagnosis or a substitute for a dietitian.
 
-ChronicNerd is the conversational DietNerd project: a research assistant for evidence-based diet and nutrition questions, with durable user conversations, rolling summaries, follow-up question rewriting, and document uploads. It is part of the CustomNerd research family and is developed by:
+## What is in this repo
 
-- **Sanghita Chakraborty** - New York University, New York, USA
-- **Harsh Kashyap** - Thapar Institute of Engineering and Technology, Patiala, India
-- **Dennis Shasha** - Department of Computer Science, New York University, New York, USA
+- A FastAPI research API (`dietnerd-backend/`) that searches and processes scientific literature, builds answers, and exposes progress through server-sent events (SSE).
+- A responsive, browser-based chat (`dietnerd-website/`) with conversation history, follow-up context, attachment uploads, an in-chat source list and source drawer, a download-answer control, and related saved-question suggestions.
+- MySQL-backed user accounts and conversations. Passwords use bcrypt; session tokens are stored as digests in a database table and sent to browsers in HttpOnly cookies. Changing a password revokes other sessions.
+- Optional research controls: claim-source ledger and a browser-local answer notebook. These are opt-in display/storage features, not scientific validation. A retrieved source or matched citation does **not** prove an answer's claim.
+- Local Docker Compose and automated API/browser tests. The frontend is plain HTML, CSS and JavaScript.
 
-![DietNerd Logo](dietnerd-website/assets/dietnerd_logo.png)
+The research pipeline can take time. The chat shows stages and retrieved article titles while work is running; these titles are search context, not verified claim support. SSE reconnects can replay bounded progress from the same running API process, but a process restart can interrupt an in-flight request. Saved conversation turns remain in MySQL.
 
-DietNerd (https://dietnerd.org/) is a web-based LLM-powered tool that answers diet and nutrition-related questions by extracting and summarizing information from academic papers sourced from PubMed. Users can ask questions on various topics, including dietary strategies, nutrition science, and health outcomes, and receive detailed, evidence-based responses based on the latest research. It utilizes a unique article search strategy and is built with multiple safety-motivated touchpoints, including a safety analysis that evaluates the pros, cons, and risks of the topics in question.
+## Project layout
 
-The tool is designed to provide reliable and up-to-date information for individuals, health professionals, and researchers alike. Our mission is to enrich conversations between patients and their medical providers and equip users with knowledge.
+| Path | Purpose |
+| --- | --- |
+| `dietnerd-backend/main.py` | FastAPI endpoints, research orchestration, SSE, session-backed conversation routes |
+| `dietnerd-backend/helper_functions.py` | Research, PubMed and publisher helpers |
+| `dietnerd-backend/auth.py`, `conversation_store.py` | Authentication helpers and atomic turn storage |
+| `dietnerd-website/index.html`, `index.js`, `index.css` | Main chat and source UI |
+| `dietnerd-website/login.html`, `about.html`, `contact.html`, `addons.html` | Account and supporting pages |
+| `scripts/build-s3-site.sh` | Build a static-only site artifact with a configured public API URL |
+| `tests/` | API contract, integration, concurrency and browser checks |
+| `docs/aws-deployment.md` | Deployment preparation and security decisions, not a record of a completed AWS deployment |
 
-## Features
+## Run locally
 
-- Query-based diet and nutrition information
-- Evidence-based answers backed by scientific research
-- Similar question suggestions
-- PDF generation of answers
-- Reference analysis with links to full articles
-
-## Technology Stack
-
-- Frontend: HTML, CSS, JavaScript
-- Backend API
-## Project Structure
-
-- `index.html`: Main page of the application
-- `index.js`: Core functionality for querying and displaying answers
-- `index.css`: Styles for the main page
-- `reference.html`: Page for displaying detailed reference information
-- `reference.js`: Functionality for the reference page
-- `reference.css`: Styles for the reference page
-- `about.html`: Information about DietNerd and the team
-- `about.css`: Styles for the about page
-- `contact.html`: Contact form for user feedback
-- `contact.css`: Styles for the contact page
-- `env.js`: Environment variables for API endpoints and email service
-
-## Team
-
-- Professor Dennis Shasha @ New York University
-- Shela Wu @ New York University
-- Zubair Yacub @ University of Illinois Urbana Champaign
-
-## Disclaimer
-
-DietNerd is an exploratory tool designed to enrich conversations with registered dietitians or registered dietitian nutritionists. The insights provided may not fully consider all potential medication interactions or pre-existing conditions. Always consult with a healthcare professional for personalized advice.
-
-
-## Accounts and sign-in
-
-Every API route needs a signed-in user. Passwords are hashed with bcrypt and the
-session lives in an HttpOnly cookie (`dietnerd_session`) backed by a server-side
-sessions table, so signing out or changing the password revokes it.
-
-- `POST /register`, `POST /login`, `POST /logout`, `GET /me`
-- `POST /forgot_password` always answers the same way, so it never reveals whether an account exists. The emailed link opens `login.html#reset_token=...` and expires after `RESET_TTL_MINUTES` (default 30).
-- `POST /reset_password` sets a new password and signs out every other session.
-- `POST /change_password` needs the current password.
-- Login, register and forgot-password are rate limited per client.
-
-Reset mail goes out through Amazon SES when `MAIL_FROM` (a verified SES identity) and `AWS_SES_REGION` are set, through SMTP when `SMTP_HOST` is set, and otherwise the link is only written to the API log. `MAIL_BACKEND=ses|smtp|log` forces one. See `.env.example`.
-
-## Run locally with Docker
+Requirements: Docker with Compose. Copy the example configuration, set your research API credentials, then start the three services:
 
 ```bash
-cp .env.example .env      # add OPENAI_API_KEY, NCBI_API_KEY and the publisher keys
+cp .env.example .env
+# Edit .env with OPENAI_API_KEY, NCBI_API_KEY and any applicable publisher keys.
 docker compose up --build
 ```
 
-- Site: http://localhost:8080
-- API health check: http://localhost:8000/health
+Open http://localhost:8080 and create an account. The API health endpoint is http://localhost:8000/health. Compose starts MySQL 8, the API and an nginx static-site server. MySQL uses the named `dbdata` volume. The backend creates its tables at startup.
 
-The compose file starts MySQL 8, the API (tables are created on startup) and an nginx container serving `dietnerd-website/`. `dietnerd-website/env.js` points the site at `http://localhost:8000`; change `API_URL` there, and `ALLOWED_ORIGINS` / `PUBLIC_SITE_URL` in `.env`, when the site moves to a real domain. Set `COOKIE_SECURE=1` once it is served over HTTPS.
+`dietnerd-website/env.js` is browser-visible configuration, not a secret store; its local default API URL is `http://localhost:8000`. Keep `.env`, keys and database credentials out of version control. Use HTTPS and `COOKIE_SECURE=1` for real deployments. With a separate site/API origin, set `ALLOWED_ORIGINS`, `PUBLIC_SITE_URL` and cookie settings deliberately. A static S3 website over HTTP with a separate HTTP API has **not** been validated as a working authenticated setup.
 
-## Clean local verification
+For local password-reset testing, `.env.example` describes the SES, SMTP and log-only paths. Log-only mode writes reset links to backend logs and is not suitable for a public launch.
 
-The API tests use MySQL-specific transactions, foreign keys, and locking, so they should not be replaced with SQLite. A disposable MySQL 8 fixture is provided for a clean-clone run:
+## Tests
+
+For the disposable MySQL-backed suite:
 
 ```bash
 python -m venv .venv
@@ -88,23 +52,24 @@ pip install -r requirements-test.txt
 ./tests/run_local_mysql_tests.sh
 ```
 
-The script starts an isolated MySQL container, runs the API and concurrency integration tests plus the remaining test suite, and removes the database container and volume on exit. It uses port `33306` by default; set `CHRONICNERD_TEST_MYSQL_PORT` if that port is occupied.
-
-For the browser fixture after the MySQL tests are green:
+The script uses a temporary MySQL 8 container and cleans up its test volume. For browser integration checks, install Node packages and run the browser fixture with the same test database environment:
 
 ```bash
 npm ci
-# With the same DB environment variables (host, port, user, password, database):
 ./tests/run_browser_e2e.sh
 node tests/browser_xss_e2e.js
 ```
 
-`run_browser_e2e.sh` starts the stubbed API and the static site, then drives real Chrome through register, a cached answer, a follow-up that uses conversation memory, a new conversation, a file upload, delete, sign out, forgot password, the reset link, and signing in with the new password. Screenshots are written to `/downloads/`.
+The browser fixture stubs external science APIs; it does not prove a live PubMed/OpenAI answer. A release check should cover a real authenticated question, research progress, source links, reconnection behavior, uploads and a return visit to saved history.
 
-The browser fixture stubs only the external science APIs. A release claim still requires a separate live OpenAI/PubMed pass with valid credentials.
+## Static build and deployment notes
 
-## Planned AWS deployment for ChronicNerd
+```bash
+API_URL=/api ./scripts/build-s3-site.sh
+```
 
-The target topology is EC2 for the API, private S3 + CloudFront for the static frontend, and SES for password-reset mail. See [docs/aws-deployment.md](docs/aws-deployment.md) for the account/domain decisions, architecture, security limits and end-to-end checklist. Until the domain and AWS account are approved, this remains a local build, not a deployed service.
+This writes `dist/site/`, with the public API URL in its generated `env.js`. For production, prefer a same-origin HTTPS `/api` proxy with cookie forwarding and no caching of authenticated responses. The static build alone is not a functional deployed app: database, API, auth cookies, SSE, reset mail and uploads also need end-to-end checks. See `docs/aws-deployment.md` for the proposed private S3/CloudFront path and open operational decisions; do not treat that plan as a provisioned environment.
 
-Build the static package for a same-origin CloudFront `/api` proxy with `API_URL=/api ./scripts/build-s3-site.sh`. It writes `dist/site/`, replacing the source `env.js` localhost API URL with a public endpoint. Keep backend secrets out of that directory and out of Git. For a separate API hostname, use an HTTPS `API_URL` and configure cookies/CORS explicitly; never point a live HTTPS site at `http://`.
+## Safety
+
+DietNerd is meant to enrich conversations with registered dietitians or other qualified clinicians. Answers may miss medication interactions or pre-existing conditions. Verify important health decisions with a professional and inspect original papers before relying on a claim.
