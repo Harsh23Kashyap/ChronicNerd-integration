@@ -85,8 +85,12 @@ async function refreshConversationList() {
     const select = document.getElementById('conversation-select');
     const currentId = getConversationId() || '';
     const response = await apiFetch('/conversations');
-    if (!response.ok) return;
+    if (!response.ok) {
+        document.querySelector('.sidebar-heading span').textContent = 'History unavailable';
+        return;
+    }
     const data = await response.json();
+    document.querySelector('.sidebar-heading span').textContent = `Conversations (${(data.conversations || []).length})`;
     select.innerHTML = '<option value="">New conversation</option>';
     (data.conversations || []).forEach((conversation) => {
         const option = document.createElement('option');
@@ -94,7 +98,14 @@ async function refreshConversationList() {
         option.textContent = conversation.title || 'Untitled conversation';
         select.appendChild(option);
     });
-    select.value = currentId;
+    const latestId = (data.conversations || [])[0]?.conversation_id || '';
+    const selectedId = (data.conversations || []).some(c => c.conversation_id === currentId) ? currentId : latestId;
+    select.value = selectedId;
+    if (selectedId && selectedId !== currentId && !questionInFlight &&
+        !document.querySelector('#chat-thread .chat-message.user')) {
+        sessionStorage.setItem('dietnerd_conversation_id', selectedId);
+        await renderSelectedConversation(selectedId);
+    }
 }
 
 async function renderSelectedConversation(conversationId) {
@@ -552,75 +563,104 @@ const generatePDF = () => {
  */
 let attachmentExists = false;
 // Answering the question from the attachment
+function renderAttachmentChip(name, state = 'ready') {
+    const item = document.createElement('span');
+    item.className = `existing-attachment-item ${state === 'uploading' ? 'uploading' : ''}`;
+    const icon = document.createElement('span');
+    icon.className = 'attachment-file-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#173f35" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2.5h8l4 4V21H6z"/><path d="M14 2.5V7h4M9 11h6M9 15h6"/></svg>';
+    const filename = document.createElement('span');
+    filename.className = 'attachment-name';
+    filename.textContent = name;
+    filename.title = name;
+    item.append(icon, filename);
+    if (state === 'uploading') {
+        const meter = document.createElement('span');
+        meter.className = 'attachment-meter';
+        meter.setAttribute('aria-hidden', 'true');
+        item.append(meter);
+    } else {
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.className = 'existing-attachment-remove';
+        removeButton.dataset.filename = name;
+        removeButton.textContent = '×';
+        removeButton.setAttribute('aria-label', `Remove ${name}`);
+        item.append(removeButton);
+    }
+    return item;
+}
+
 async function refreshExistingAttachments() {
     const existingAttachmentsElement = document.getElementById('existing-attachments');
     const label = document.getElementById('attachment-label');
-    try {
-        const response = await apiFetch('/list_attachments');
-        const data = await response.json();
-        const documentNames = data.documents || [];
-        attachmentExists = documentNames.length > 0;
-        existingAttachmentsElement.replaceChildren();
-        documentNames.forEach((name) => {
-            const item = document.createElement('span');
-            item.className = 'existing-attachment-item';
-            item.appendChild(document.createTextNode(name));
-
-            const removeButton = document.createElement('button');
-            removeButton.type = 'button';
-            removeButton.className = 'existing-attachment-remove';
-            removeButton.dataset.filename = name;
-            removeButton.textContent = '\u2715';
-            item.appendChild(removeButton);
-            existingAttachmentsElement.appendChild(item);
-        });
-        label.textContent = attachmentExists ? '' : 'No file attached';
-    } catch (err) {
-        console.log('Failed to fetch existing attachments:', err);
-    }
+    const response = await apiFetch('/list_attachments');
+    if (!response.ok) throw new Error(await DietNerdAPI.readError(response, `Could not load attachments (${response.status}).`));
+    const data = await response.json();
+    const documentNames = Array.isArray(data.documents) ? data.documents : [];
+    attachmentExists = documentNames.length > 0;
+    existingAttachmentsElement.replaceChildren(...documentNames.map(name => renderAttachmentChip(name)));
+    label.textContent = attachmentExists ? '' : 'No file attached';
 }
 
 document.addEventListener('DOMContentLoaded', function () {
     const fileInput = document.getElementById('attachment-file');
     const existingAttachmentsElement = document.getElementById('existing-attachments');
 
-    refreshExistingAttachments();
+    refreshExistingAttachments().catch((err) => { document.getElementById('attachment-label').textContent = err.message; });
     refreshConversationList();
 
     fileInput.addEventListener('change', async function () {
-        if (fileInput.files.length > 0) {
-            const file = fileInput.files[0];
-            const formData = new FormData();
-            formData.append('attachment', file);
-            const label = document.getElementById('attachment-label');
-            label.textContent = `Uploading ${file.name}...`;
-            try {
-                const response = await apiFetch('/upload_attachment', {
-                    method: 'POST',
-                    body: formData,
-                });
-                fileInput.value = '';
-                if (!response.ok) {
-                    label.textContent = await DietNerdAPI.readError(response, 'Upload failed. Please try again.');
-                    return;
-                }
-                await refreshExistingAttachments();
-            } catch (err) {
-                label.textContent = 'Upload failed. Please try again.';
+        if (!fileInput.files.length) return;
+        const file = fileInput.files[0];
+        fileInput.value = '';
+        const formData = new FormData();
+        formData.append('attachment', file);
+        const label = document.getElementById('attachment-label');
+        const attachButton = document.getElementById('attach-button');
+        attachButton.disabled = true;
+        existingAttachmentsElement.append(renderAttachmentChip(file.name, 'uploading'));
+        label.textContent = `Uploading ${file.name}...`;
+        label.classList.add('upload-active');
+        try {
+            const response = await apiFetch('/upload_attachment', { method: 'POST', body: formData });
+            if (!response.ok) {
+                label.textContent = await DietNerdAPI.readError(response, `Upload failed (${response.status}). Please try again.`);
+                await refreshExistingAttachments().catch(() => {});
+                return;
             }
+            await refreshExistingAttachments();
+            label.textContent = `${file.name} attached`;
+        } catch (err) {
+            existingAttachmentsElement.querySelector('.uploading')?.remove();
+            label.textContent = `Could not upload ${file.name}. Check your connection and try again.`;
+            console.error('Attachment upload failed:', err);
+        } finally {
+            attachButton.disabled = false;
+            label.classList.remove('upload-active');
         }
     });
 
     existingAttachmentsElement.addEventListener('click', async function (event) {
-        if (!event.target.matches('.existing-attachment-remove')) return;
-        const filename = event.target.dataset.filename;
+        const removeButton = event.target.closest('.existing-attachment-remove');
+        if (!removeButton || removeButton.disabled) return;
+        const filename = removeButton.dataset.filename;
+        const chip = removeButton.closest('.existing-attachment-item');
+        removeButton.disabled = true;
+        chip.classList.add('removing');
+        removeButton.setAttribute('aria-label', `Removing ${filename}`);
+        document.getElementById('attachment-label').textContent = `Removing ${filename}...`;
         try {
-            await apiFetch(`/remove_attachment?filename=${encodeURIComponent(filename)}`, {
-                method: 'DELETE',
-            });
+            const response = await apiFetch(`/remove_attachment?filename=${encodeURIComponent(filename)}`, { method: 'DELETE' });
+            if (!response.ok) throw new Error(await DietNerdAPI.readError(response, `Could not remove attachment (${response.status}).`));
             await refreshExistingAttachments();
         } catch (err) {
-            console.log('Attachment removal failed:', err);
+            chip.classList.remove('removing');
+            removeButton.disabled = false;
+            removeButton.setAttribute('aria-label', `Remove ${filename}`);
+            document.getElementById('attachment-label').textContent = err.message || `Could not remove ${filename}. Try again.`;
+            console.error('Attachment removal failed:', err);
         }
     });
 });

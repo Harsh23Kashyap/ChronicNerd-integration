@@ -153,3 +153,37 @@ body:after{display:none}
 .chat-message .message-content{max-width:min(74%,760px)}
 .chat-message.user .message-content{max-width:min(74%,760px)}
 @media(max-width:800px){.chat-message .message-content,.chat-message.user .message-content{max-width:calc(100% - 54px)}}
+
+.existing-attachments:empty{display:none}
+.existing-attachments:not(:empty){display:flex;flex-wrap:wrap;gap:7px;padding:0 0 9px}
+.existing-attachment-item{max-width:min(100%,360px);min-height:34px;gap:8px;border:1px solid #d4e0d6;border-radius:10px;background:#f3f7f1;color:var(--forest);padding:4px 6px 4px 8px;font-size:12px;font-weight:600;animation:chipEnter .22s ease-out both}
+.attachment-file-icon{width:24px;height:24px;display:grid;place-items:center;flex:none;border-radius:6px;background:#e0ebdf;color:var(--forest);font-size:17px;font-weight:400}
+.attachment-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.existing-attachment-remove{width:24px;height:24px;flex:none;display:grid;place-items:center;border-radius:6px;font-size:19px;line-height:1;color:#5e7267}
+.existing-attachment-remove:hover,.existing-attachment-remove:focus-visible{background:#f7e6e3;color:var(--danger);outline:none}
+.existing-attachment-item.uploading{position:relative;overflow:hidden;border-color:#a7c1ae}
+.existing-attachment-item.uploading .attachment-file-icon{animation:uploadBreathe 1.2s ease-in-out infinite}
+.attachment-meter{position:absolute;bottom:0;left:0;width:40%;height:2px;background:var(--forest-2);animation:uploadTrack 1.25s ease-in-out infinite alternate}
+#attach-button:disabled{opacity:.6;cursor:wait}
+.composer #submit:not(:disabled):hover{transform:translateY(-2px)}
+.similar-disclosure summary:before{transition:transform .2s ease}.similar-disclosure[open] summary:before{transform:rotate(45deg)}
+@keyframes chipEnter{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes uploadBreathe{50%{opacity:.5;transform:translateY(-2px)}}
+@keyframes uploadTrack{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+@media(prefers-reduced-motion:reduce){.existing-attachment-item,.existing-attachment-item.uploading .attachment-file-icon,.attachment-meter{animation:none}.similar-disclosure summary:before{transition:none}}
+
+.existing-attachment-item.removing{opacity:.65;border-color:#d3dbd5}
+.existing-attachment-item.removing .attachment-file-icon{animation:uploadBreathe 1.2s ease-in-out infinite}
+.existing-attachment-item.removing .existing-attachment-remove{animation:removeSpin 1s ease-in-out infinite;cursor:wait}
+@keyframes removeSpin{50%{transform:rotate(90deg);opacity:.45}}
+@media(prefers-reduced-motion:reduce){.existing-attachment-item.removing .attachment-file-icon,.existing-attachment-item.removing .existing-attachment-remove{animation:none}}
+.existing-attachment-item.removing .attachment-name{position:relative;opacity:.65}
+.existing-attachment-item.removing .attachment-name:after{content:"";position:absolute;left:0;right:0;top:50%;border-top:1px solid currentColor;transform-origin:left;animation:removeStrike .45s ease-out both}
+@keyframes removeStrike{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@media(prefers-reduced-motion:reduce){.existing-attachment-item.removing .attachment-name:after{animation:none}}
+
+.attachment-file-icon svg{width:16px;height:16px;display:block}
+#attachment-label.upload-active{display:inline-flex;align-items:center;gap:6px;color:var(--forest);font-weight:600}
+#attachment-label.upload-active:before{content:"";width:10px;height:10px;display:inline-block;border:1.5px solid #b9d1bd;border-top-color:var(--forest);border-radius:50%;animation:uploadSpinner .8s linear infinite}
+@keyframes uploadSpinner{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#attachment-label.upload-active:before{animation:none;border-color:var(--forest)}}
