@@ -314,7 +314,7 @@ async def health():
 async def register(auth_body: AuthModel, response: Response):
     email = auth.normalize_email(auth_body.email)
     password = auth_body.password
-    problem = auth.validate_email(email) or auth.validate_password(password)
+    problem = auth.validate_identifier(email) or auth.validate_password(password)
     if problem:
         raise HTTPException(status_code=400, detail=problem)
     connection = _get_db_connection()
@@ -322,9 +322,14 @@ async def register(auth_body: AuthModel, response: Response):
         cursor = connection.cursor()
         cursor.execute("SELECT email FROM users WHERE email = %s", (email,))
         if cursor.fetchone():
-            raise HTTPException(status_code=409, detail="An account with this email already exists. Try signing in.")
-        cursor.execute("INSERT INTO users (email, password) VALUES (%s, %s)", (email, auth.hash_password(password)))
-        connection.commit()
+            raise HTTPException(status_code=409, detail="This email or username is already registered. Try signing in.")
+        try:
+            cursor.execute("INSERT INTO users (email, password) VALUES (%s, %s)", (email, auth.hash_password(password)))
+            connection.commit()
+        except mysql.connector.IntegrityError as exc:
+            if getattr(exc, "errno", None) == 1062:
+                raise HTTPException(status_code=409, detail="This email or username is already registered. Try signing in.")
+            raise
     finally:
         connection.close()
     logging.info("[AUTH] Registered new user")
@@ -347,10 +352,10 @@ async def login(auth_body: AuthModel, request: Request, response: Response):
         connection.close()
     if not row:
         auth.burn_time(password)
-        raise HTTPException(status_code=401, detail="Incorrect email or password.")
+        raise HTTPException(status_code=401, detail="Incorrect email/username or password.")
     ok, needs_upgrade = auth.verify_password(password, row[0])
     if not ok:
-        raise HTTPException(status_code=401, detail="Incorrect email or password.")
+        raise HTTPException(status_code=401, detail="Incorrect email/username or password.")
     if needs_upgrade:
         _set_password(email, password)
         logging.info("[AUTH] Upgraded legacy password hash to bcrypt")

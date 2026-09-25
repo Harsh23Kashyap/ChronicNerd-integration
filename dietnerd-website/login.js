@@ -48,7 +48,7 @@
         const password = document.getElementById('login-password').value;
         const errorEl = document.getElementById('login-error');
         errorEl.textContent = '';
-        if (!email || !password) { errorEl.textContent = 'Please enter your email and password.'; return; }
+        if (!email || !password) { errorEl.textContent = 'Please enter your username and password.'; return; }
         const button = document.getElementById('login-button');
         setBusy(button, true, 'Signing in...');
         try {
@@ -74,7 +74,7 @@
         emailFeedback.textContent = '';
         document.getElementById('register-email').removeAttribute('aria-invalid');
         errorEl.textContent = '';
-        if (!email || !password) { errorEl.textContent = 'Please enter an email and a password.'; return; }
+        if (!email || !password) { errorEl.textContent = 'Please enter a username and a password.'; return; }
         if (password.length < 8) { errorEl.textContent = 'Password must be at least 8 characters.'; return; }
         if (password !== confirm) { errorEl.textContent = 'The two passwords do not match.'; return; }
         const button = document.getElementById('register-button');
@@ -83,8 +83,8 @@
             const res = await post('/register', { email, password });
             if (!res.ok) {
                 const message = await readError(res, 'Could not create the account.');
-                if (res.status === 409 && /account with this email already exists/i.test(message)) {
-                    emailFeedback.textContent = 'This email is already registered. Try signing in.';
+                if (res.status === 409 && /already (?:registered|exists)/i.test(message)) {
+                    emailFeedback.textContent = 'This email or username is already registered. Try signing in.';
                     document.getElementById('register-email').setAttribute('aria-invalid', 'true');
                 } else errorEl.textContent = message;
                 return;

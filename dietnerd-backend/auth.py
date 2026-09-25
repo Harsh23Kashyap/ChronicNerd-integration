@@ -42,6 +42,18 @@ def validate_email(email: str) -> Optional[str]:
     return None
 
 
+USERNAME_RE = re.compile(r"^[a-z][a-z0-9_]{2,29}$")
+
+
+def validate_identifier(identifier: str) -> Optional[str]:
+    """A single case-insensitive login name: email address or plain username."""
+    if '@' in identifier:
+        return validate_email(identifier)
+    if not USERNAME_RE.fullmatch(identifier or ''):
+        return "Use a valid email or a username of 3-30 letters, numbers or underscores (start with a letter)."
+    return None
+
+
 def validate_password(password: str) -> Optional[str]:
     if not password or len(password) < MIN_PASSWORD_LENGTH:
         return f"Password must be at least {MIN_PASSWORD_LENGTH} characters."
