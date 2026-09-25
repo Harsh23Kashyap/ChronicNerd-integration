@@ -65,6 +65,9 @@ class ComparisonGateTest(unittest.TestCase):
 
     def test_unparsed_comparison_has_no_false_pair(self):
         self.assertIsNone(h.extract_comparison_terms('Is the Mediterranean diet healthy?'))
+        self.assertIsNone(h.extract_comparison_terms('Compare effectiveness, uncertainty, and safety. Cite the original studies.'))
+        self.assertIsNone(h.extract_comparison_terms('Compare efficacy, risks, and benefits for probiotic use.'))
+        self.assertIsNone(h.extract_comparison_terms('Compare effectiveness and safety for probiotic use.'))
         self.assertEqual(h.extract_comparison_terms('Which is better, Mediterranean or low-carb?'), ('mediterranean', 'low-carb'))
         self.assertEqual(h.extract_comparison_terms('Compare Mediterranean and low-carbohydrate diets for CKD'),
                          ('mediterranean', 'low-carbohydrate diets'))

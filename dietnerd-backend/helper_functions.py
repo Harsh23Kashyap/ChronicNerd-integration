@@ -1570,7 +1570,10 @@ def extract_comparison_terms(question: str):
   text = question.strip().rstrip('?.! ')
   prefix = re.search(r"\bcompar(?:e|ing)\s+", text, re.IGNORECASE)
   if prefix:
-    text = text[prefix.end():]
+    # Question facets are not treatment arms.
+    if re.search(r'\bcompar(?:e|ing)\s+(?:effectiveness|efficacy|benefits?|risks?|safety|evidence|outcomes?|results?)\s*(?:,|\band\b)', text, re.I):
+      return None
+    text = re.split(r'[.;!?]', text[prefix.end():], maxsplit=1)[0]
     pattern = r"^(.+?)\s+(?:with|and|versus|vs\.?|against|compared\s+(?:with|to))\s+(.+?)(?=\s+(?:for|among|in)\s+|$)"
   else:
     # Do not let an LLM rank two isolated studies for a 'which is better' query.
