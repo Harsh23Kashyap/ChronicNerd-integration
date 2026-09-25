@@ -12,6 +12,11 @@
         // Hide the app until the server confirms the session (see auth check below).
         document.documentElement.classList.add('auth-pending');
     </script>
+    <div class="app-loading visible" role="status" aria-live="polite" style="position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#fffdf7;color:#173f35">
+        <span class="app-loading-mark" aria-hidden="true">D</span>
+        <strong>Opening DietNerd</strong>
+        <span class="app-loading-track" aria-hidden="true"></span>
+    </div>
     <div class="toolbar">
         <a href="index.html">Home</a>
         <a href="about.html">About</a>

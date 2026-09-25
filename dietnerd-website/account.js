@@ -7,6 +7,7 @@
     currentUser().then((email) => {
         if (email === null) { window.location.href = 'login.html'; return; }
         document.documentElement.classList.remove('auth-pending');
+        document.querySelector('.app-loading')?.remove();
         document.getElementById('account-email').textContent = email || 'Account';
         if (email === undefined) {
             document.querySelector('.hint').textContent = 'DietNerd cannot reach its server right now. Please try again in a moment.';

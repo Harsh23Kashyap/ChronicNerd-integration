@@ -21,41 +21,90 @@ function closeSourcesPanel() {
     panel.setAttribute('aria-hidden', 'true');
 }
 
-function openSourcesPanel(references) {
+function openSourcesPanel(sourceCards) {
     const shell = document.querySelector('.chat-shell');
     const panel = document.getElementById('sources-panel');
     const content = document.getElementById('sources-panel-content');
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = references;
-    const entries = Array.from(wrapper.querySelectorAll('a'));
-    content.innerHTML = '';
-    if (entries.length) {
-        entries.forEach((entry, index) => {
-            const card = document.createElement('article');
-            card.className = 'source-card';
-            const label = document.createElement('span');
-            label.className = 'sources-kicker';
-            label.textContent = `Source ${index + 1}`;
-            card.append(label, entry.cloneNode(true));
-            const detail = entry.nextSibling;
-            if (detail && detail.textContent.trim()) {
-                const note = document.createElement('p');
-                note.textContent = detail.textContent.replace(/^\s*-\s*/, '');
-                card.appendChild(note);
-            }
-            content.appendChild(card);
-        });
-    } else {
+    content.replaceChildren();
+    const cards = Array.isArray(sourceCards) ? sourceCards : [];
+    if (!cards.length) {
+        const empty = document.createElement('p');
+        empty.className = 'sources-empty';
+        empty.textContent = 'No linked sources are available for this answer.';
+        content.append(empty);
+    }
+    cards.forEach((source) => {
         const card = document.createElement('article');
         card.className = 'source-card';
-        card.innerHTML = references;
-        content.appendChild(card);
-    }
+        const label = document.createElement('span');
+        label.className = 'sources-kicker';
+        label.textContent = `Reference ${source.number}`;
+        const title = document.createElement('strong');
+        title.textContent = source.title || 'Source title unavailable';
+        const note = document.createElement('p');
+        note.textContent = 'Retrieved citation. Claim support is not independently verified.';
+        card.append(label, title, note);
+        if (source.url && /^https:\/\//i.test(source.url)) {
+            const link = document.createElement('a');
+            link.href = source.url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = 'Open original in new tab ↗';
+            card.append(link);
+        }
+        content.append(card);
+    });
     shell.classList.add('sources-open');
     panel.setAttribute('aria-hidden', 'false');
 }
 
-function appendChatMessage(role, text, references = '') {
+function splitReferenceSection(answer) {
+    const match = /(?:^|\n)\s*(?:#{1,4}\s*)?(?:\*\*)?References?(?:\*\*)?:?\s*(?:\n|$)/i.exec(String(answer));
+    return match ? { body: String(answer).slice(0, match.index), references: String(answer).slice(match.index + match[0].length) }
+        : { body: String(answer), references: '' };
+}
+
+function sourcesForAnswer(answer) {
+    let objects = {};
+    try { objects = JSON.parse(localStorage.getItem('referenceObject') || '{}') || {}; } catch { /* citations still render */ }
+    const {references} = splitReferenceSection(answer);
+    const lines = references.split(/\n(?=\s*(?:\[\d+\]|\d+\.))/);
+    const fromAnswer = lines.flatMap(line => {
+        const match = line.trim().match(/^(?:\[(\d+)\]|(\d+)\.)\s*(.+)/s);
+        if (!match) return [];
+        const number = Number(match[1] || match[2]);
+        const title = match[3].split(/\n(?=\s*(?:DietNerd|ChronicNerd) is\b)/i)[0].trim().slice(0, 240);
+        if (!title) return [];
+        const normalized = value => String(value).replace(/^\s*(?:\[\d+\]|\d+\.)\s*/, '').trim().replace(/\s+/g,' ').toLowerCase();
+        const metadata = Object.entries(objects).find(([citation]) => normalized(citation) === normalized(line.split('\n')[0]));
+        return [{number, title, url: metadata && typeof metadata[1]?.URL === 'string' ? metadata[1].URL : ''}];
+    });
+    return [...new Map(fromAnswer.map(source => [source.number, source])).values()].sort((a,b)=>a.number-b.number);
+}
+
+function appendInChatSources(content, sources) {
+    if (!sources.length) return;
+    const section = document.createElement('section');
+    section.className = 'in-chat-sources';
+    const heading = document.createElement('h3');
+    heading.textContent = 'Sources';
+    section.append(heading);
+    sources.forEach(source => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'in-chat-source';
+        const number = document.createElement('span');
+        number.textContent = `[${source.number}]`;
+        const title = document.createElement('span');
+        title.textContent = source.title;
+        row.append(number, title);
+        row.addEventListener('click', () => openSourcesPanel(sources));
+        section.append(row);
+    });
+    content.append(section);
+}
+
+function appendChatMessage(role, text, references = []) {
     const thread = document.getElementById('chat-thread');
     thread.querySelector('.welcome-message')?.remove();
     const article = document.createElement('article');
@@ -65,16 +114,12 @@ function appendChatMessage(role, text, references = '') {
     avatar.textContent = role === 'assistant' ? 'D' : 'You';
     const content = document.createElement('div');
     content.className = 'message-content';
-    content.innerHTML = role === 'assistant' ? formatText(text) : text.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const answerBody = role === 'assistant' && Array.isArray(references) && references.length
+        ? splitReferenceSection(text).body
+        : text;
+    content.innerHTML = role === 'assistant' ? formatText(answerBody) : String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;');
     article.append(avatar, content);
-    if (references && references !== 'No references available.') {
-        const sourceButton = document.createElement('button');
-        sourceButton.type = 'button';
-        sourceButton.className = 'message-sources-button';
-        sourceButton.textContent = 'View sources';
-        sourceButton.addEventListener('click', () => openSourcesPanel(references));
-        content.appendChild(sourceButton);
-    }
+    if (role === 'assistant' && Array.isArray(references)) appendInChatSources(content, references);
     thread.appendChild(article);
     enterConversationMode();
     thread.scrollTop = thread.scrollHeight;
@@ -123,20 +168,38 @@ async function refreshConversationList() {
     }
 }
 
+let conversationLoadToken = 0;
 async function renderSelectedConversation(conversationId) {
     if (!conversationId) return;
+    const token = ++conversationLoadToken;
     enterConversationMode();
-    const response = await apiFetch(`/session_memory?conversation_id=${encodeURIComponent(conversationId)}`);
-    if (!response.ok) return;
-    const data = await response.json();
-    const entries = data.entries || [];
-    clearChatThread();
-    entries.forEach((entry) => {
-        appendChatMessage('user', entry.raw_question || '');
-        const content = appendChatMessage('assistant', entry.answer || '');
-        appendEvidenceLedger(content, entry.evidence_ledger || []);
-    });
-    document.getElementById('question').value = '';
+    closeSourcesPanel();
+    const thread = document.getElementById('chat-thread');
+    thread.innerHTML = '<div class="history-loading" role="status" aria-live="polite"><span class="history-loading-icon" aria-hidden="true"></span><span>Opening conversation...</span><span class="history-loading-line"></span><span class="history-loading-line short"></span></div>';
+    try {
+        const response = await apiFetch(`/session_memory?conversation_id=${encodeURIComponent(conversationId)}`);
+        if (token !== conversationLoadToken) return;
+        if (!response.ok) throw new Error(await DietNerdAPI.readError(response, 'Could not load this conversation.'));
+        const data = await response.json();
+        if (token !== conversationLoadToken) return;
+        const entries = data.entries || [];
+        clearChatThread();
+        entries.forEach((entry) => {
+            appendChatMessage('user', entry.raw_question || '');
+            const content = appendChatMessage('assistant', entry.answer || '', sourcesForAnswer(entry.answer || ''));
+            appendEvidenceLedger(content, entry.evidence_ledger || []);
+        });
+        if (!entries.length) thread.innerHTML = '<div class="history-loading empty-history">This conversation has no completed answers yet.</div>';
+        document.getElementById('question').value = '';
+    } catch (err) {
+        if (token === conversationLoadToken) {
+            thread.innerHTML = '';
+            const message = document.createElement('p');
+            message.className = 'history-loading';
+            message.textContent = err.message || 'Could not load this conversation.';
+            thread.append(message);
+        }
+    }
 }
 
 const disclaimer = `
@@ -700,6 +763,8 @@ function appendPendingMessage() {
     note.textContent = 'Searching published research can take a minute. Please keep this page open.';
     const steps = document.createElement('ol');
     steps.className = 'research-steps';
+    const articleList = document.createElement('div');
+    articleList.className = 'progress-articles';
     const labels = ['Understanding question', 'Searching papers', 'Reading studies', 'Synthesizing answer'];
     labels.forEach(label => { const step = document.createElement('li'); step.textContent = label; steps.append(step); });
     let stage = 0;
@@ -714,12 +779,22 @@ function appendPendingMessage() {
         // A pulse shows activity; only a real server event advances a stage.
         steps.classList.toggle('pulse');
     }, 1200);
-    content.append(status, note, steps);
+    content.append(status, note, steps, articleList);
     article.append(avatar, content);
     thread.appendChild(article);
     enterConversationMode();
     thread.scrollTop = thread.scrollHeight;
     return {
+        addArticles(update) {
+            articleList.replaceChildren();
+            const heading = document.createElement('strong');
+            heading.textContent = update.stage === 'relevant' ? 'Relevant paper titles found' : 'Paper titles found';
+            const list = document.createElement('ul');
+            (update.article_titles || []).slice(0,5).forEach(title => { const li = document.createElement('li'); li.textContent = title; list.appendChild(li); });
+            articleList.append(heading, list);
+            note.textContent = update.note || 'Retrieved titles do not prove support for the answer.';
+            thread.scrollTop = thread.scrollHeight;
+        },
         setStatus(text) {
             status.textContent = text;
             if (/Generated PubMed queries|Retrieved .* Articles/i.test(text)) stage = Math.max(stage, 1);
@@ -782,7 +857,7 @@ function appendEvidenceLedger(content, ledger) {
 
 function showAssistantAnswer(answer, ledger = [], question = '') {
     localStorage.setItem('rawOutput', answer);
-    const content = appendChatMessage('assistant', answer, formatReferences(answer));
+    const content = appendChatMessage('assistant', answer, sourcesForAnswer(answer));
     appendEvidenceLedger(content, ledger);
     if (ChronicNerdAddons.enabled('notebook')) {
         const button = document.createElement('button');
@@ -828,23 +903,42 @@ async function runGeneration(userQuery, pending) {
 
     return new Promise((resolve, reject) => {
         const eventSource = new EventSource(`${baseURL}/sse?request_id=${encodeURIComponent(data.request_id)}`, { withCredentials: true });
+        let lostAt = 0;
+        const reconnectTimer = window.setInterval(() => {
+            // EventSource retries transient failures. A lasting failure should
+            // not leave the send button locked forever.
+            if (lostAt && Date.now() - lostAt > 60000) {
+                window.clearInterval(reconnectTimer);
+                eventSource.close();
+                reject(new Error('Research connection did not recover. Open this conversation from history to check whether the answer finished.'));
+            }
+        }, 1000);
+        eventSource.onopen = () => {
+            if (lostAt && pending) pending.setStatus('Connected again. Catching up on research...');
+            lostAt = 0;
+        };
         eventSource.onmessage = (event) => {
-            const message = JSON.parse(event.data);
+            let message;
+            try { message = JSON.parse(event.data); }
+            catch { return; }
             if (!message.update) return;
             if (message.update.end_output) {
+                window.clearInterval(reconnectTimer);
                 localStorage.setItem('referenceObject', JSON.stringify(message.update.citations_obj || {}));
                 localStorage.setItem('citations', JSON.stringify(message.update.citations || []));
                 localStorage.setItem('allArticles', JSON.stringify(message.update.relevant_articles || []));
                 eventSource.close();
                 resolve(message.update);
+            } else if (message.update.article_titles && pending) {
+                pending.addArticles(message.update);
             } else if (pending) {
                 pending.setStatus(String(message.update));
             }
         };
         eventSource.onerror = () => {
-            eventSource.close();
-            reject(new Error('The connection to DietNerd was lost while the answer was being prepared.'));
-        };
+            if (!lostAt) lostAt = Date.now();
+            if (pending) pending.setStatus('Connection interrupted. Reconnecting to the same research request...');
+            };
     });
 }
 
@@ -1032,6 +1126,7 @@ document.getElementById('conversation-select').addEventListener('change', async 
 document.getElementById('new-conversation').addEventListener('click', () => {
     enterConversationMode();
     closeSourcesPanel();
+    ++conversationLoadToken;
     sessionStorage.removeItem('dietnerd_conversation_id');
     document.getElementById('conversation-select').value = '';
     document.querySelectorAll('.conversation-row.active').forEach(row => { row.classList.remove('active'); row.removeAttribute('aria-current'); });
