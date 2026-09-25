@@ -106,21 +106,6 @@ class AuthTest(unittest.TestCase):
         self.assertEqual(c.get("/me").status_code, 401)
         self.assertEqual(_db("SELECT COUNT(*) FROM user_sessions WHERE email = %s", (A,))[0][0], 0)
 
-    def test_byok_session_and_logout(self):
-        a = self.register(A)
-        b = self.register(B)
-        a.base_url = "https://testserver"
-        origin = {"Origin": "http://localhost:8080"}
-        key = "sk-" + "q" * 40
-        response = a.post("/openai_key", json={"api_key": key}, headers=origin)
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertNotIn(key, response.text)
-        self.assertEqual(a.get("/openai_key").json(), {"ready": True})
-        self.assertEqual(b.get("/openai_key").json(), {"ready": False})
-        self.assertEqual(a.post("/logout").status_code, 200)
-        self.assertEqual(a.get("/openai_key").status_code, 401)
-        self.assertFalse(any(email == A for _, email in main.byok._sessions))
-
     def test_expired_session_is_rejected(self):
         c = self.register(A)
         _db("UPDATE user_sessions SET expires_at = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 MINUTE) WHERE email = %s", (A,))

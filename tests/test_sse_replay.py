@@ -134,7 +134,8 @@ def test_title_is_thread_scoped_and_stale_generation_cannot_overwrite():
     llm.choices = [MagicMock(message=MagicMock(content='Zinc Sleep Evidence'))]
     with patch.object(main, 'get_session_memory', return_value=turns), \
          patch.object(main, '_get_db_connection', return_value=db), \
-         patch.object(main.client.chat.completions, 'create', return_value=llm):
+         patch.object(main, 'client') as model_client:
+        model_client.chat.completions.create.return_value = llm
         main.update_conversation_title('a@example.invalid', 'thread-1')
     sql, args = cursor.execute.call_args.args
     assert 'WHERE email = %s AND conversation_id = %s AND next_query_number = %s' in sql

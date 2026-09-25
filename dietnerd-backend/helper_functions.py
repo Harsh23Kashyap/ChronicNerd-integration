@@ -37,7 +37,7 @@ from bs4 import BeautifulSoup
 
 # Summarizer
 from concurrent.futures import as_completed
-from byok import ContextThreadPoolExecutor as ThreadPoolExecutor, ScopedOpenAI
+from concurrent.futures import ThreadPoolExecutor
 import string
 from tenacity import retry # Exponential Backoff
 # wait_random_exponential stop_after_attempt
@@ -57,7 +57,7 @@ import textwrap
 # If No Similar Questions:
 """
 
-client = ScopedOpenAI()
+client = OpenAI() if os.getenv("OPENAI_API_KEY") else None
 
 """# Step1. Evaluate Question Validity
 We do not answer questions related to meal-planning or recipe creation.

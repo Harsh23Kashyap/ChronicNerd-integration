@@ -77,7 +77,7 @@ class ApiIntegrationTest(unittest.TestCase):
         self.assertEqual(missing.status_code, 404)
 
     def test_process_query_returns_two_ids_and_streams_final_answer(self):
-        def fake_process(user_query, request_id, email, conversation_id):
+        def fake_process(user_query, request_id, email, conversation_id, temporary_history=None):
             entry = {
                 "request_id": request_id,
                 "raw_question": user_query,

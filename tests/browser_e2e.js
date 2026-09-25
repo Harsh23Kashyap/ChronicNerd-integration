@@ -28,22 +28,6 @@ const assert = require('assert');
   const session = cookies.find(c => c.name === 'dietnerd_session');
   assert(session && session.httpOnly, 'session cookie must be HttpOnly');
 
-  // BYOK is masked, scoped to the session, and never written to browser storage.
-  await page.click('#openai-key-button');
-  await page.waitForSelector('#openai-key-dialog[open]');
-  assert.equal(await page.locator('#openai-key-input').getAttribute('type'), 'password');
-  const fakeKey = 'sk-' + 'z'.repeat(40);
-  await page.fill('#openai-key-input', fakeKey);
-  await page.click('#openai-key-save');
-  await page.waitForFunction(() => document.getElementById('openai-key-status').textContent.includes('Key ready'));
-  assert.equal(await page.inputValue('#openai-key-input'), '');
-  assert(!JSON.stringify(await page.evaluate(() => ({local: {...localStorage}, session: {...sessionStorage}}))).includes(fakeKey));
-  await page.screenshot({path: '/downloads/chronicnerd-byok-mock-dialog.png'});
-  await page.click('#openai-key-remove');
-  await page.waitForFunction(() => document.getElementById('openai-key-status').textContent.includes('Key removed'));
-  await page.click('#openai-key-close');
-
-
   await page.fill('#question', 'browser cached question');
   await page.click('#submit');
   await page.waitForFunction(() => document.querySelector('#chat-thread').textContent.includes('Cached browser-test answer'));

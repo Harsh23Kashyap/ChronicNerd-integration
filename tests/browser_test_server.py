@@ -12,7 +12,7 @@ def summary(previous, question, answer):
     return ((previous + "\n") if previous else "") + question + ": " + answer
 
 
-def fake_process(user_query, request_id, email, conversation_id):
+def fake_process(user_query, request_id, email, conversation_id, temporary_history=None):
     memory = main.get_session_memory(email, conversation_id)
     standalone = user_query
     if memory and user_query.lower() == "what about sleep?":

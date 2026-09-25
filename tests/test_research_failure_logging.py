@@ -20,7 +20,7 @@ def test_failure_logs_cause_types_without_exception_text():
     error.__cause__ = nested
     fake_loop = MagicMock()
     with patch.object(main, 'process_user_query', side_effect=error), patch.object(main, 'send_update', new=lambda *args, **kwargs: None), patch.object(main, 'loop', fake_loop), patch.object(main.logging, 'error') as log:
-        main._run_research_with_key('private query', 'req', 'test@example.invalid', 'conv', None)
+        main._run_research_with_key('private query', 'req', 'test@example.invalid', 'conv')
     fmt, *params = log.call_args.args
     rendered = fmt % tuple(params)
     assert 'RuntimeError' in rendered and 'ConnectionError>OSError' in rendered
