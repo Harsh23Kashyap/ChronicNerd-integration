@@ -42,16 +42,6 @@
             </div>
         </form>
     </dialog>
-    <dialog id="openai-key-dialog" class="settings-dialog">
-        <form id="openai-key-form" method="dialog" autocomplete="off">
-            <h2>Research API key</h2>
-            <p>The key stays in this server's memory for at most 30 minutes, tied to this sign-in. It is not saved in your browser or account. Use this only over HTTPS or on localhost.</p>
-            <label for="openai-key-input">OpenAI API key</label>
-            <input type="password" id="openai-key-input" name="api_key" autocomplete="off" spellcheck="false" required>
-            <p id="openai-key-status" role="status"></p>
-            <div class="dialog-actions"><button type="button" id="openai-key-remove" class="secondary-button">Remove key</button><button type="button" id="openai-key-close" class="secondary-button">Close</button><button type="submit" id="openai-key-save" class="primary-button">Use for this session</button></div>
-        </form>
-    </dialog>
     <!-- <div id="ownership">
         <p>Professor Dennis Shasha @ New York University</p>
         <p>Shela Wu @ New York University</p>
@@ -86,7 +76,7 @@
             </svg>
         </section>
             <section class="chat-panel" aria-labelledby="chat-title">
-                <header class="chat-header"><div><span class="status-dot"></span><strong id="chat-title">DietNerd assistant</strong></div><div class="header-actions"><button type="button" id="openai-key-button" class="header-button">Research key</button><span>Evidence-focused</span><button id="generate-pdf-button" class="hidden header-button">Download answer</button></div></header>
+                <header class="chat-header"><div><span class="status-dot"></span><strong id="chat-title">DietNerd assistant</strong></div><div class="header-actions"><span>Evidence-focused</span><button id="generate-pdf-button" class="hidden header-button">Download answer</button></div></header>
                 <div id="chat-thread" class="chat-thread" role="log" aria-live="off" aria-relevant="additions">
                     <div class="welcome-message">
                         <span class="assistant-avatar">D</span>
