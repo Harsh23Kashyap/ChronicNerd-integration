@@ -689,15 +689,38 @@ function appendPendingMessage() {
     const note = document.createElement('p');
     note.className = 'pending-note';
     note.textContent = 'Searching published research can take a minute. Please keep this page open.';
-    content.append(status, note);
+    const steps = document.createElement('ol');
+    steps.className = 'research-steps';
+    const labels = ['Understanding question', 'Searching papers', 'Reading studies', 'Synthesizing answer'];
+    labels.forEach(label => { const step = document.createElement('li'); step.textContent = label; steps.append(step); });
+    let stage = 0;
+    function renderStage() {
+        [...steps.children].forEach((step, index) => {
+            step.classList.toggle('active', index === stage);
+            step.classList.toggle('complete', index < stage);
+        });
+    }
+    renderStage();
+    const stageTimer = window.setInterval(() => {
+        // A pulse shows activity; only a real server event advances a stage.
+        steps.classList.toggle('pulse');
+    }, 1200);
+    content.append(status, note, steps);
     article.append(avatar, content);
     thread.appendChild(article);
     enterConversationMode();
     thread.scrollTop = thread.scrollHeight;
     return {
-        setStatus(text) { status.textContent = text; },
-        remove() { article.remove(); },
+        setStatus(text) {
+            status.textContent = text;
+            if (/Generated PubMed queries|Retrieved .* Articles/i.test(text)) stage = Math.max(stage, 1);
+            if (/Classified .* Relevant Articles|Processed .* Articles/i.test(text)) stage = Math.max(stage, 2);
+            if (/Processed .* Articles/i.test(text)) stage = 3;
+            renderStage();
+        },
+        remove() { window.clearInterval(stageTimer); article.remove(); },
         fail(message, retry) {
+            window.clearInterval(stageTimer);
             article.classList.remove('pending');
             article.classList.add('failed');
             content.replaceChildren();
