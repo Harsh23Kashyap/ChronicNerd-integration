@@ -107,7 +107,8 @@ async function renderSelectedConversation(conversationId) {
     clearChatThread();
     entries.forEach((entry) => {
         appendChatMessage('user', entry.raw_question || '');
-        appendChatMessage('assistant', entry.answer || '');
+        const content = appendChatMessage('assistant', entry.answer || '');
+        appendEvidenceLedger(content, entry.evidence_ledger || []);
     });
     document.getElementById('question').value = '';
 }
@@ -669,9 +670,41 @@ function appendPendingMessage() {
     };
 }
 
-function showAssistantAnswer(answer) {
+function appendEvidenceLedger(content, ledger) {
+    if (!Array.isArray(ledger) || !ledger.length) return;
+    const details = document.createElement('details');
+    details.className = 'evidence-ledger';
+    const summary = document.createElement('summary');
+    summary.textContent = `Evidence check · ${ledger.length} cited claim${ledger.length === 1 ? '' : 's'}`;
+    details.append(summary);
+    ledger.forEach(row => {
+        const entry = document.createElement('div');
+        entry.className = 'evidence-ledger-entry';
+        const claim = document.createElement('p');
+        claim.textContent = `${row.citation_marker || ''} ${row.claim || ''}`;
+        const source = document.createElement('p');
+        source.textContent = row.source_title
+            ? `Source: ${row.source_title}` : 'Source unresolved';
+        const status = document.createElement('p');
+        status.textContent = row.evidence_note || 'Support not independently verified.';
+        entry.append(claim, source, status);
+        if (row.source_url && /^https:\/\//.test(row.source_url)) {
+            const link = document.createElement('a');
+            link.href = row.source_url;
+            link.textContent = 'Open source';
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            entry.append(link);
+        }
+        details.append(entry);
+    });
+    content.append(details);
+}
+
+function showAssistantAnswer(answer, ledger = []) {
     localStorage.setItem('rawOutput', answer);
-    appendChatMessage('assistant', answer, formatReferences(answer));
+    const content = appendChatMessage('assistant', answer, formatReferences(answer));
+    appendEvidenceLedger(content, ledger);
     document.getElementById('generate-pdf-button').classList.remove('hidden');
 }
 
@@ -733,7 +766,7 @@ async function generateAnswer(question) {
         }
         const result = await runGeneration(question, pending);
         pending.remove();
-        showAssistantAnswer(result.end_output);
+        showAssistantAnswer(result.end_output, result.evidence_ledger || []);
     } catch (err) {
         console.error(err);
         pending.fail(`${err.message || 'Something went wrong.'} Please try again.`, () => generateAnswer(question));
@@ -749,7 +782,7 @@ async function answerFromAttachment(question) {
     try {
         const result = await runGeneration(question, pending);
         pending.remove();
-        showAssistantAnswer(result.end_output);
+        showAssistantAnswer(result.end_output, result.evidence_ledger || []);
     } catch (err) {
         console.error(err);
         pending.fail(`${err.message || 'Something went wrong.'} Please try again.`, () => answerFromAttachment(question));

@@ -879,9 +879,11 @@ def process_user_query(user_query, request_id, email, conversation_id):
     print('[Section 5] Final Synthesis: ', final_output_duration)
 
 
+    from evidence_ledger import build_claim_evidence_ledger
     return_obj = {
        "end_output": final_output,
-       "relevant_articles": all_relevant_articles
+       "relevant_articles": all_relevant_articles,
+       "evidence_ledger": build_claim_evidence_ledger(final_output, all_relevant_articles)
     }
 
     main_output, citations = split_end_output(return_obj["end_output"])
@@ -895,7 +897,8 @@ def process_user_query(user_query, request_id, email, conversation_id):
         "request_id": request_id,
         "raw_question": raw_question,
         "standalone_question": user_query,
-        "answer": final_output
+        "answer": final_output,
+        "evidence_ledger": return_obj["evidence_ledger"]
     }
     append_session_memory(email, conversation_id, session_memory_entry)
     return_obj["session_memory_entry"] = session_memory_entry

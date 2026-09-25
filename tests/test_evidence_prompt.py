@@ -25,7 +25,7 @@ class EvidencePromptTest(unittest.TestCase):
 
     def test_when_both_diets_retrieved_model_must_acknowledge_evidence_limits(self):
         articles = [{'title': 'Mediterranean versus low-carbohydrate diet in CKD'}]
-        reply = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='Direct comparison in this study only.'))])
+        reply = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='What we know\nDirect comparison in this study only.\n\nWhat we don\'t know\nThe evidence is limited.\n\nWhat to ask a dietitian\nDoes it fit me?'))])
         with patch.object(h.client.chat.completions, 'create', return_value=reply) as create:
             output = h.generate_final_response(articles, 'Compare Mediterranean and low-carbohydrate diets for a person with CKD.')
         system = create.call_args.kwargs['messages'][0]['content']
@@ -33,6 +33,19 @@ class EvidencePromptTest(unittest.TestCase):
         self.assertIn('there is no minimum citation count', system)
         self.assertNotIn('choose at least 8 articles', system)
         self.assertIn('Direct comparison in this study only', output)
+
+class AnswerShapeTest(unittest.TestCase):
+    def test_freeform_recommendation_is_stopped(self):
+        unsafe = 'You should take this supplement daily.'
+        answer = h.enforce_three_part_answer(unsafe)
+        self.assertNotIn(unsafe, answer)
+        for heading in ('What we know', "What we don't know", 'What to ask a dietitian'):
+            self.assertIn(heading, answer)
+
+    def test_complete_three_part_answer_is_preserved(self):
+        answer = 'What we know\nEvidence is limited.\n\nWhat we don\'t know\nNo direct trial.\n\nWhat to ask a dietitian\nIs this relevant?'
+        self.assertEqual(h.enforce_three_part_answer(answer), answer)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -63,3 +63,5 @@ body.conversation-mode .chat-shell.sources-open .sources-panel{width:390px;borde
 @media(max-width:800px){.header-actions>span{display:none}}
 @media(min-width:801px){.chat-shell{grid-template-rows:minmax(0,1fr)}.chat-shell>.chat-sidebar{grid-column:1;grid-row:1}.chat-shell>.chat-panel{grid-column:2;grid-row:1}.chat-shell>.sources-panel{grid-column:3;grid-row:1}}
 .chat-header strong,.header-actions span,.header-button{white-space:nowrap}
+
+.evidence-ledger{border-top:1px solid var(--line);margin-top:14px;padding-top:10px;font-size:12px}.evidence-ledger summary{cursor:pointer;font-weight:700;color:var(--forest)}.evidence-ledger-entry{padding:10px 0;border-bottom:1px solid var(--line)}.evidence-ledger-entry p{margin:3px 0;overflow-wrap:anywhere}.evidence-ledger-entry p:not(:first-child){color:var(--muted)}.evidence-ledger-entry a{color:var(--forest-2);font-weight:700}

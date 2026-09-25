@@ -1610,6 +1610,29 @@ def article_directly_compares(article: dict, first: str, second: str) -> bool:
           bool(re.search(r"\b(?:versus|vs\.?|compar(?:e|ed|ison|ative|ing)|head.to.head|randomi[sz]ed)\b", text)))
 
 
+def enforce_three_part_answer(answer: str) -> str:
+  """Stop rather than publish a freeform synthesis that ignored the safety shape.
+
+  This checks structure, not factual support. The ledger separately exposes citation
+  resolution and the remaining unverified claim-to-passage relationship.
+  """
+  headings = ["What we know", "What we don't know", "What to ask a dietitian"]
+  text = str(answer or "")
+  positions = []
+  for heading in headings:
+    matches = list(re.finditer(r"(?im)^\s*(?:#{1,4}\s*)?(?:\*\*)?" +
+                               re.escape(heading) + r"(?:\*\*)?\s*:?\s*$", text))
+    if len(matches) != 1:
+      break
+    positions.append(matches[0].start())
+  if len(positions) == 3 and positions == sorted(positions) and len(set(positions)) == 3:
+    return text
+  return ("What we know\nI cannot confirm a reliable answer from the retrieved material right now.\n\n"
+          "What we don't know\nThe available synthesis did not pass the answer-structure check; "
+          "no finding or ranking should be inferred from it.\n\n"
+          "What to ask a dietitian\nWhich studies directly address this question for me?")
+
+
 def generate_final_response(all_relevant_articles, query, attachment_text=None, original_articles=None):
   """
   Generate the final response to the user question based on the strongest level of evidence in the provided article summaries.
@@ -1675,7 +1698,7 @@ def generate_final_response(all_relevant_articles, query, attachment_text=None, 
     top_p=1
   )
 
-  output = output_response.choices[0].message.content
+  output = enforce_three_part_answer(output_response.choices[0].message.content)
   final_output = output + "\n" + disclaimer
   return final_output
 
