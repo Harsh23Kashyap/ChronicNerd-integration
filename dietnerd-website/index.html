@@ -109,6 +109,37 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="env.js"></script>
     <script src="api.js"></script>
+    <script>
+        (function () {
+            var overlay = document.querySelector('.app-loading');
+            var guard = window.setTimeout(function () {
+                if (!document.documentElement.classList.contains('auth-pending')) return;
+                overlay.querySelector('strong').textContent = 'DietNerd is taking longer than expected';
+                var retry = document.createElement('button');
+                retry.type = 'button'; retry.textContent = 'Try again';
+                retry.onclick = function () { window.location.reload(); };
+                overlay.appendChild(retry);
+            }, 12000);
+            window.DietNerdAPI.apiFetch('/me', {allowUnauthorized:true}).then(function (response) {
+                if (response.status === 401) { window.location.href = 'login.html'; return; }
+                if (!response.ok) throw new Error('Session check failed');
+                return response.json().then(function (user) {
+                    if (!user || !user.email) throw new Error('Invalid session response');
+                    clearTimeout(guard);
+                    document.documentElement.classList.remove('auth-pending');
+                    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                });
+            }).catch(function () {
+                clearTimeout(guard);
+                if (!overlay.parentNode) return;
+                overlay.querySelector('strong').textContent = 'Could not open DietNerd';
+                var retry = document.createElement('button');
+                retry.type = 'button'; retry.textContent = 'Try again';
+                retry.onclick = function () { window.location.reload(); };
+                overlay.appendChild(retry);
+            });
+        })();
+    </script>
     <script src="addons.js"></script>
     <script src="index.js"></script>
     <script src="account.js"></script>
