@@ -277,3 +277,4 @@ body:after{display:none}
 .linked-source{cursor:pointer}.linked-source:hover{box-shadow:0 10px 28px rgba(23,63,53,.12)}
 .chat-sidebar :is(button,a):focus-visible,.chat-panel :is(button,a):focus-visible,.sources-panel :is(button,a):focus-visible{outline:2px solid var(--forest-2);outline-offset:2px}
 @media(prefers-reduced-motion:reduce){.icon-button,.header-button,.composer #submit,.composer #attach-button,.delete-link,.history-toggle,.in-chat-source,.source-card a,.addon-save-button,.delete-dialog-actions button{transition:none!important;transform:none!important}}
+.chat-message.assistant .message-content>li{list-style-position:inside;padding-left:18px;text-indent:-18px;margin-left:10px}
