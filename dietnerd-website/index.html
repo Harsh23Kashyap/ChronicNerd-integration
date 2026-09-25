@@ -13,7 +13,7 @@
         document.documentElement.classList.add('auth-pending');
     </script>
     <div class="app-loading visible" role="status" aria-live="polite" style="position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#fffdf7;color:#173f35">
-        <span class="app-loading-mark" aria-hidden="true">D</span>
+        <div class="app-loading-emblem" aria-hidden="true"><span class="app-loading-orbit"></span><img src="assets/dietnerd_dialogue.svg" alt=""></div>
         <strong>Opening DietNerd</strong>
         <span class="app-loading-track" aria-hidden="true"></span>
     </div>
@@ -98,6 +98,13 @@
             </aside>
         </main>
     </div>
+    <dialog id="delete-conversation-dialog" class="delete-dialog" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-description">
+        <div class="delete-dialog-icon" aria-hidden="true"><span class="delete-dialog-lid"></span><span class="delete-dialog-bin">×</span></div>
+        <h2 id="delete-dialog-title">Delete this conversation?</h2>
+        <p id="delete-dialog-description">This conversation and its chat history will be removed. This can't be undone.</p>
+        <p id="delete-dialog-error" role="alert" hidden></p>
+        <div class="delete-dialog-actions"><button type="button" id="delete-dialog-cancel">Keep conversation</button><button type="button" id="delete-dialog-confirm">Delete conversation</button></div>
+    </dialog>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="env.js"></script>

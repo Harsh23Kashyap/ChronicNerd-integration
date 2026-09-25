@@ -984,14 +984,6 @@ function offerSimilarQuestions(question, similar) {
     const hintElement = document.querySelector('.hint');
     container.replaceChildren();
     hintElement.textContent = '';
-    const disclosure = document.createElement('details');
-    disclosure.className = 'similar-disclosure';
-    const summary = document.createElement('summary');
-    summary.textContent = 'Related questions';
-    summary.title = 'Show related questions with saved answers';
-    const choices = document.createElement('div');
-    choices.className = 'similar-choices';
-    disclosure.append(summary, choices);
     const seen = new Set([question.trim().toLocaleLowerCase().replace(/\s+/g, ' ')]);
     const unique = (Array.isArray(similar) ? similar : []).filter((item) => {
         const text = String(item?.[1] || '').trim();
@@ -1000,23 +992,31 @@ function offerSimilarQuestions(question, similar) {
         seen.add(key);
         return true;
     }).slice(0, 4);
-    unique.forEach((item) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.textContent = item[1];
-        button.addEventListener('click', () => {
-            container.style.display = 'none';
-            hintElement.textContent = '';
-            // Replace the provisional question; don't leave two user bubbles.
-            const last = Array.from(document.querySelectorAll('#chat-thread .chat-message.user')).at(-1);
-            if (last) last.remove();
-            selectedSuggestion = true;
-            document.getElementById('question').value = item[1];
-            document.getElementById('submit').click();
+    if (unique.length) {
+        const title = document.createElement('p');
+        title.className = 'similar-title';
+        title.textContent = 'Related questions with saved answers';
+        container.append(title);
+        const choices = document.createElement('div');
+        choices.className = 'similar-choices';
+        unique.forEach((item) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'related-question-choice';
+            button.textContent = String(item[1]);
+            button.addEventListener('click', () => {
+                container.style.display = 'none';
+                hintElement.textContent = '';
+                    const last = Array.from(document.querySelectorAll('#chat-thread .chat-message.user')).at(-1);
+                if (last) last.remove();
+                selectedSuggestion = true;
+                document.getElementById('question').value = String(item[1]);
+                document.getElementById('submit').click();
+            });
+            choices.appendChild(button);
         });
-        choices.appendChild(button);
-    });
-    if (unique.length) container.appendChild(disclosure);
+        container.append(choices);
+    }
     const original = document.createElement('button');
     original.type = 'button';
     original.className = 'generate-original';
@@ -1137,18 +1137,47 @@ document.getElementById('new-conversation').addEventListener('click', () => {
     document.querySelector('.hint').textContent = '';
 });
 
-document.getElementById('delete-conversation').addEventListener('click', async () => {
+const deleteDialog = document.getElementById('delete-conversation-dialog');
+const deleteConfirm = document.getElementById('delete-dialog-confirm');
+let pendingDeleteId = null;
+document.getElementById('delete-conversation').addEventListener('click', () => {
     const conversationId = getConversationId();
-    if (!conversationId) return;
-    if (!window.confirm('Delete this conversation? This cannot be undone.')) return;
-    const response = await apiFetch(`/conversations/${encodeURIComponent(conversationId)}`, {method: 'DELETE'});
-    if (!response.ok) {
-        console.error('Failed to delete conversation');
+    if (!conversationId) {
+        document.querySelector('.hint').textContent = 'Choose a conversation to delete.';
         return;
     }
-    sessionStorage.removeItem('dietnerd_conversation_id');
-    document.getElementById('new-conversation').click();
-    await refreshConversationList();
+    pendingDeleteId = conversationId;
+    document.getElementById('delete-dialog-error').hidden = true;
+    deleteDialog.showModal();
+});
+document.getElementById('delete-dialog-cancel').addEventListener('click', () => deleteDialog.close());
+deleteDialog.addEventListener('close', () => { pendingDeleteId = null; });
+deleteConfirm.addEventListener('click', async () => {
+    const conversationId = pendingDeleteId;
+    if (!conversationId || deleteConfirm.disabled) return;
+    const error = document.getElementById('delete-dialog-error');
+    error.hidden = true;
+    deleteConfirm.disabled = true;
+    deleteConfirm.textContent = 'Deleting...';
+    deleteDialog.classList.add('deleting');
+    try {
+        const response = await apiFetch(`/conversations/${encodeURIComponent(conversationId)}`, {method: 'DELETE'});
+        if (!response.ok) throw new Error(await DietNerdAPI.readError(response, `Could not delete this conversation (${response.status}).`));
+        if (getConversationId() === conversationId) {
+            sessionStorage.removeItem('dietnerd_conversation_id');
+            document.getElementById('new-conversation').click();
+        }
+        deleteDialog.close();
+        try { await refreshConversationList(); }
+        catch { document.querySelector('.hint').textContent = 'Deleted. Refresh to update conversation history.'; }
+    } catch (err) {
+        error.textContent = err.message || 'Could not delete this conversation. Try again.';
+        error.hidden = false;
+    } finally {
+        deleteConfirm.disabled = false;
+        deleteConfirm.textContent = 'Delete conversation';
+        deleteDialog.classList.remove('deleting');
+    }
 });
 
 document.getElementById('generate-pdf-button').addEventListener('click', async(event) => {

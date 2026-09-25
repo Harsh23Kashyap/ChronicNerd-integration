@@ -4,14 +4,41 @@
     const dropdown = document.getElementById('account-dropdown');
     const dialog = document.getElementById('change-password-dialog');
 
+    const loading = document.querySelector('.app-loading');
+    const loadingTimer = window.setTimeout(() => {
+        if (!document.documentElement.classList.contains('auth-pending')) return;
+        loading?.classList.add('failed');
+        loading?.querySelector('strong')?.replaceChildren(document.createTextNode('DietNerd is taking longer than expected'));
+        const status = document.createElement('p');
+        status.textContent = 'Check your connection and try again.';
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.textContent = 'Try again';
+        retry.addEventListener('click', () => location.reload());
+        loading?.append(status, retry);
+    }, 12000);
     currentUser().then((email) => {
-        if (email === null) { window.location.href = 'login.html'; return; }
+        window.clearTimeout(loadingTimer);
+        if (email === null) {
+            loading?.querySelector('strong')?.replaceChildren(document.createTextNode('Taking you to sign in...'));
+            window.location.replace('login.html');
+            return;
+        }
         document.documentElement.classList.remove('auth-pending');
-        document.querySelector('.app-loading')?.remove();
+        loading?.remove();
         document.getElementById('account-email').textContent = email || 'Account';
         if (email === undefined) {
             document.querySelector('.hint').textContent = 'DietNerd cannot reach its server right now. Please try again in a moment.';
         }
+    }).catch(() => {
+        window.clearTimeout(loadingTimer);
+        loading?.classList.add('failed');
+        loading?.querySelector('strong')?.replaceChildren(document.createTextNode('Could not open DietNerd'));
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.textContent = 'Try again';
+        retry.addEventListener('click', () => location.reload());
+        loading?.append(retry);
     });
 
     function closeMenu() { dropdown.hidden = true; button.setAttribute('aria-expanded', 'false'); }

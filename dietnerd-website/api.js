@@ -27,7 +27,8 @@
     async function currentUser() {
         try {
             const response = await apiFetch('/me', { allowUnauthorized: true });
-            if (!response.ok) return null;
+            if (response.status === 401 || response.status === 403) return null;
+            if (!response.ok) return undefined;
             const data = await response.json();
             sessionStorage.setItem('dietnerd_user', data.email);
             return data.email;
