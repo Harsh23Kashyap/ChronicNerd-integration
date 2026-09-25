@@ -716,6 +716,7 @@ function appendPendingMessage() {
 }
 
 function appendEvidenceLedger(content, ledger) {
+    if (!ChronicNerdAddons.enabled('ledger')) return;
     if (!Array.isArray(ledger) || !ledger.length) return;
     const details = document.createElement('details');
     details.className = 'evidence-ledger';
@@ -746,10 +747,24 @@ function appendEvidenceLedger(content, ledger) {
     content.append(details);
 }
 
-function showAssistantAnswer(answer, ledger = []) {
+function showAssistantAnswer(answer, ledger = [], question = '') {
     localStorage.setItem('rawOutput', answer);
     const content = appendChatMessage('assistant', answer, formatReferences(answer));
     appendEvidenceLedger(content, ledger);
+    if (ChronicNerdAddons.enabled('notebook')) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'addon-save-button';
+        button.textContent = 'Save to my notebook';
+        button.addEventListener('click', () => {
+            try {
+                ChronicNerdAddons.saveNote(question, answer, ledger.map(row => row.source_url));
+                button.textContent = 'Saved to notebook';
+                button.disabled = true;
+            } catch { button.textContent = 'Could not save locally'; }
+        });
+        content.append(button);
+    }
     document.getElementById('generate-pdf-button').classList.remove('hidden');
 }
 
@@ -811,7 +826,7 @@ async function generateAnswer(question) {
         }
         const result = await runGeneration(question, pending);
         pending.remove();
-        showAssistantAnswer(result.end_output, result.evidence_ledger || []);
+        showAssistantAnswer(result.end_output, result.evidence_ledger || [], question);
     } catch (err) {
         console.error(err);
         pending.fail(`${err.message || 'Something went wrong.'} Please try again.`, () => generateAnswer(question));
@@ -827,7 +842,7 @@ async function answerFromAttachment(question) {
     try {
         const result = await runGeneration(question, pending);
         pending.remove();
-        showAssistantAnswer(result.end_output, result.evidence_ledger || []);
+        showAssistantAnswer(result.end_output, result.evidence_ledger || [], question);
     } catch (err) {
         console.error(err);
         pending.fail(`${err.message || 'Something went wrong.'} Please try again.`, () => answerFromAttachment(question));
@@ -900,7 +915,7 @@ document.getElementById('submit').addEventListener('click', async () => {
         setComposerBusy(false);
     }
     if (cachedAnswer) {
-        showAssistantAnswer(cachedAnswer);
+        showAssistantAnswer(cachedAnswer, [], question);
         return;
     }
 

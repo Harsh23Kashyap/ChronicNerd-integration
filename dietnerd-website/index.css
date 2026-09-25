@@ -65,3 +65,11 @@ body.conversation-mode .chat-shell.sources-open .sources-panel{width:390px;borde
 .chat-header strong,.header-actions span,.header-button{white-space:nowrap}
 
 .evidence-ledger{border-top:1px solid var(--line);margin-top:14px;padding-top:10px;font-size:12px}.evidence-ledger summary{cursor:pointer;font-weight:700;color:var(--forest)}.evidence-ledger-entry{padding:10px 0;border-bottom:1px solid var(--line)}.evidence-ledger-entry p{margin:3px 0;overflow-wrap:anywhere}.evidence-ledger-entry p:not(:first-child){color:var(--muted)}.evidence-ledger-entry a{color:var(--forest-2);font-weight:700}
+
+.account-dropdown .account-menu-link{display:block;text-align:left;padding:10px 12px;border-radius:9px;color:var(--ink);font:500 14px "DM Sans",sans-serif;text-decoration:none}
+.account-dropdown .account-menu-link:hover,.account-dropdown .account-menu-link:focus-visible{background:rgba(23,63,53,.07)}
+.addon-save-button{border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--forest);padding:7px 10px;font:700 11px "DM Sans",sans-serif;cursor:pointer;margin-top:9px}
+
+.sidebar-addons-link{display:block;color:var(--forest);font:700 12px "DM Sans",sans-serif;text-decoration:none;border-top:1px solid var(--line);padding:12px 2px}
+.sidebar-addons-link:hover{text-decoration:underline}
+@media(max-width:800px){.chat-sidebar .sidebar-addons-link{grid-column:1/-1;padding:3px 2px;border:0;font-size:11px}}

@@ -19,6 +19,7 @@
         <div class="account-menu">
             <button type="button" id="account-button" aria-haspopup="true" aria-expanded="false"><span id="account-email">Account</span></button>
             <div id="account-dropdown" class="account-dropdown" hidden>
+                <a href="addons.html" class="account-menu-link">Research add-ons</a>
                 <button type="button" id="change-password-link">Change password</button>
                 <button type="button" id="logout-link">Sign out</button>
             </div>
@@ -91,6 +92,7 @@
                 <label for="conversation-select" class="visually-hidden">Current conversation</label>
                 <select id="conversation-select"><option value="">New conversation</option></select>
                 <button type="button" id="delete-conversation" class="delete-link">Delete current conversation</button>
+                <a href="addons.html" class="sidebar-addons-link">Research add-ons ↗</a>
                 <div class="sidebar-note"><strong>DietNerd</strong><span>Research answers grounded in published evidence.</span></div>
             </aside>
             <section class="chat-panel" aria-labelledby="chat-title">
@@ -126,6 +128,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="env.js"></script>
     <script src="api.js"></script>
+    <script src="addons.js"></script>
     <script src="index.js"></script>
     <script src="account.js"></script>
 </body>
