@@ -6,7 +6,7 @@ resolved and which checks still need a human or source-specific verifier.
 """
 import re
 
-REFERENCE_LINE = re.compile(r'^\s*\[(\d+)\]\s*(.+)$')
+REFERENCE_LINE = re.compile(r'^\s*(?:\[(\d+)\]|(\d+)\.)\s*(.+)$')
 CITATION = re.compile(r'\[(\d+)\]')
 
 
@@ -18,12 +18,14 @@ def build_claim_evidence_ledger(answer, articles):
     """Return an auditable list; unresolved markers remain explicitly unresolved."""
     if not isinstance(answer, str) or not isinstance(articles, list):
         return []
-    main, _, references = answer.partition('\nReferences:')
+    heading = re.search(r'(?im)^\s*(?:#{1,6}\s*)?References\s*:?\s*$', answer)
+    main = answer[:heading.start()] if heading else answer
+    references = answer[heading.end():] if heading else ''
     reference_lines = {}
     for line in references.splitlines():
         match = REFERENCE_LINE.match(line)
         if match:
-            reference_lines[match.group(1)] = match.group(2).strip()
+            reference_lines[match.group(1) or match.group(2)] = match.group(3).strip()
     # Match a reference only if its exact article title is present uniquely.
     resolved = {}
     for number, text in reference_lines.items():

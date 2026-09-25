@@ -32,3 +32,13 @@ class LedgerTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+def test_generated_markdown_reference_format_resolves_unique_source():
+    source = {'title': 'Effect of micronutrient supplements on influenza and other respiratory tract infections among adults: a systematic review and meta-analysis.',
+              'url': 'https://pubmed.ncbi.nlm.nih.gov/33472840/'}
+    answer = ('### What we know\n- The source discusses respiratory infections [1].\n\n'
+              '### References\n\n1. Abioye AI. Effect of micronutrient supplements on influenza and other respiratory tract infections among adults: a systematic review and meta-analysis. BMJ.\n')
+    row, = build_claim_evidence_ledger(answer, [source])
+    assert row['source_url'] == source['url']
+    assert row['support_status'] == 'not independently verified'
+    assert row['evidence_passage'] is None
