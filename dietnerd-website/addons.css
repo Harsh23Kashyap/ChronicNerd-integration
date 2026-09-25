@@ -4,3 +4,10 @@
 
 /* Motion follows the evidence path; reduced-motion users see the final static diagram. */
 .addon svg rect{transform-box:fill-box;transform-origin:center;animation:diagram-arrive .55s both}.addon svg rect:nth-of-type(2){animation-delay:.22s}.addon svg rect:nth-of-type(3){animation-delay:.44s}.addon svg path{stroke-dasharray:210;stroke-dashoffset:210;animation:diagram-line .9s ease forwards;animation-delay:.25s}.addon svg text{animation:diagram-text .45s both;animation-delay:.5s}@keyframes diagram-arrive{from{opacity:.3;transform:scale(.88)}to{opacity:1;transform:scale(1)}}@keyframes diagram-line{to{stroke-dashoffset:0}}@keyframes diagram-text{from{opacity:0}to{opacity:1}}@media(prefers-reduced-motion:reduce){.addon svg rect,.addon svg path,.addon svg text{animation:none;stroke-dashoffset:0}}
+.addon svg path{stroke-dasharray:8 6;stroke-dashoffset:0;animation:diagram-flow 1.4s linear infinite}
+.addon svg path:nth-of-type(2),.addon svg path:nth-of-type(4){stroke-dasharray:none;animation:none}
+.addon svg rect:nth-of-type(2){animation:diagram-arrive .55s .15s both}
+.addon svg rect:nth-of-type(3){animation:diagram-arrive .55s .3s both}
+@keyframes diagram-flow{to{stroke-dashoffset:-28}}
+@media(prefers-reduced-motion:reduce){.addon svg path{animation:none;stroke-dasharray:none;stroke-dashoffset:0}}
+.addon svg text{animation:none;opacity:1}
