@@ -375,3 +375,5 @@ body.temporary-mode .starter-questions .example-question:hover,body.temporary-mo
 body.temporary-mode .chat-message.user .message-content{background:#875b36}
 body.temporary-mode .chat-message.assistant .message-content{background:#f5e9d8}
 @media(prefers-reduced-motion:reduce){body.temporary-mode .chat-header .status-dot:after{animation:none}}
+
+.answer-followups{margin-top:16px;padding-top:12px;border-top:1px solid #ccd9cd;display:flex;flex-wrap:wrap;gap:7px}.answer-followups p{flex-basis:100%;margin:0 0 2px;color:var(--muted);font:700 11px "DM Sans",sans-serif;letter-spacing:.02em}.answer-followups button{border:1px solid #bbd0c1;border-radius:9px;background:#fffef9;color:var(--forest);padding:8px 10px;text-align:left;font:600 11px/1.35 "DM Sans",sans-serif;cursor:pointer}.answer-followups button:hover,.answer-followups button:focus-visible{background:#e7f0e7;border-color:#7ca38a;outline:2px solid transparent}

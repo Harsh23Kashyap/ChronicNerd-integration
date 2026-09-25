@@ -909,10 +909,37 @@ function appendEvidenceLedger(content, ledger) {
     content.append(details);
 }
 
+function appendFollowups(content, question, answer) {
+    if (!String(question || '').trim() || !String(answer || '').trim()) return;
+    const options = [
+        'What are the main limits of the evidence in your last answer?',
+        'Who might respond differently, and why?',
+        'What should I ask a dietitian about this?',
+    ];
+    const box = document.createElement('div');
+    box.className = 'answer-followups';
+    const title = document.createElement('p');
+    title.textContent = 'Keep exploring';
+    box.append(title);
+    options.forEach(text => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = text;
+        button.addEventListener('click', () => {
+            if (questionInFlight) return;
+            document.getElementById('question').value = text;
+            document.getElementById('submit').click();
+        });
+        box.append(button);
+    });
+    content.append(box);
+}
+
 function showAssistantAnswer(answer, ledger = [], question = '', storedSources = null) {
     const content = appendChatMessage('assistant', answer, [], storedSources);
     appendEvidenceLedger(content, ledger);
     appendInChatSources(content, sourcesForAnswer(answer, ledger, storedSources));
+    appendFollowups(content, question, answer);
     if (!temporaryChat) document.getElementById('generate-pdf-button').classList.remove('hidden');
 }
 
