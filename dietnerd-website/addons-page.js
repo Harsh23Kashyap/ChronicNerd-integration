@@ -9,9 +9,13 @@
     for (const feature of ['ledger', 'notebook']) {
         const input = document.getElementById('toggle-' + feature);
         input.checked = ChronicNerdAddons.enabled(feature);
+        const state = input.parentElement.querySelector('.switch-state');
+        const updateState = () => { state.textContent = input.checked ? 'On' : 'Off'; };
+        updateState();
         input.addEventListener('change', () => {
             try { ChronicNerdAddons.setEnabled(feature, input.checked); }
             catch { input.checked = !input.checked; }
+            updateState();
         });
     }
     function renderNotes() {

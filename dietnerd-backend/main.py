@@ -904,7 +904,7 @@ def process_user_query(user_query, request_id, email, conversation_id):
 
     # Final Output
     start_output = time.time()
-    final_output = generate_final_response(all_relevant_articles, pipeline_query, None, original_articles=relevant_articles)
+    final_output = generate_final_response(all_relevant_articles, pipeline_query, None, original_articles=relevant_articles, recent_history=session_memory[-8:])
     if attachment_partial_answer:
         final_output = attachment_partial_answer + "\n\n" + final_output
     end_output = time.time()

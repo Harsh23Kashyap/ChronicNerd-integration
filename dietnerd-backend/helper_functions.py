@@ -1639,7 +1639,7 @@ def enforce_three_part_answer(answer: str) -> str:
           "What to ask a dietitian\nWhich studies directly address this question for me?")
 
 
-def generate_final_response(all_relevant_articles, query, attachment_text=None, original_articles=None):
+def generate_final_response(all_relevant_articles, query, attachment_text=None, original_articles=None, recent_history=None):
   """
   Generate the final response to the user question based on the strongest level of evidence in the provided article summaries.
 
@@ -1671,7 +1671,7 @@ def generate_final_response(all_relevant_articles, query, attachment_text=None, 
   system_prompt_response =  """
       You evaluate research articles and summarize only what the supplied Evidence and Claims supports. Cite the smallest set of relevant human studies needed for each claim; there is no minimum citation count. Do not cite a study merely because it appears in the supplied set. Do not use general background papers to support a more specific clinical recommendation.
       If asked to compare interventions, first check whether the supplied studies directly compare them in the relevant population. If not, explicitly state that a comparison is not supported and stop there; do not rank or recommend either intervention, and do not add indirect studies to fill the gap. If the supplied studies do directly address the comparison, identify the outcomes, population, and uncertainty before reaching a conclusion. A prevention study cannot support a treatment recommendation for someone who already has the disease. A low-carbohydrate diet is not necessarily a high-protein diet. Never turn indirect background context into a patient-specific recommendation.
-      Prefer strong, well-conducted, peer-reviewed human studies when they directly address the question. Explain the limits and potential risks that the supplied evidence actually supports.
+      Use recent dialogue only to understand the user's current intent or stated constraints; prior answers are not evidence and cannot support a new clinical claim. Prefer strong, well-conducted, peer-reviewed human studies when they directly address the question. Explain the limits and potential risks that the supplied evidence actually supports.
       If the user question is dangeorus, harmful, or malicious, absolutely do not offer advice or strategies and absolutely do not address the pros, benefits, or potential results/outcomes. You must only focus on deterring this behavior, addressing the risks, and offering safe alternatives. The answer should also try to include as many different demographics as possible. Absolutely NO animal studies should be referenced or included in the final response. Mention dosage amounts when the information is available. Medical terms and technical concepts must be explained to a layman audience. Be sure to emphasize that you should always go and see a registered dietitian or a registered dietitian nutritionist.
       If you cite an article, use its exact citation from Evidence and Claims in a reference list and cite it in-line by its supplied bracket number. Cite only articles directly supporting the adjacent claim; do not cite tangential articles just to fill a reference list. If no supplied article directly supports an answer, say that and omit the reference list. Do not list duplicate references. Use clear section titles and short bullets when they aid readability.
 
@@ -1683,9 +1683,20 @@ def generate_final_response(all_relevant_articles, query, attachment_text=None, 
     if attachment_text else ""
   )
 
+  # Recent dialogue is for resolving intent and user-stated constraints only. Prior
+  # answers do not count as evidence for new findings or citations.
+  history_lines = []
+  for turn in (recent_history or [])[-8:]:
+    question = (turn.get("raw_question") or "").strip()
+    answer = (turn.get("answer") or "").strip()
+    if question:
+      history_lines.append(f"Question: {question[:800]}\nAnswer: {answer[:1400]}")
+  history_section = ("\n      Recent dialogue (oldest to newest; use for conversational context, "
+                     "not as evidence):\n      " + "\n      ".join(history_lines)) if history_lines else ""
+
   human_prompt_response = f"""
       Evidence and Claims: {all_relevant_articles}
-      User Question: {query}{personal_context_section}
+      User Question: {query}{personal_context_section}{history_section}
   """
 
   output_response = client.chat.completions.create(
@@ -1927,7 +1938,7 @@ def write_output_to_db(user_query, final_output, all_relevant_articles, total_ru
   upload_to_final(env_file, user_query, return_obj)
 
 
-STANDALONE_QUESTION_HISTORY = 7
+STANDALONE_QUESTION_HISTORY = 8
 
 def generate_standalone_question(raw_question: str, session_memory: list) -> str:
   if not session_memory:
