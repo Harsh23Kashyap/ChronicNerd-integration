@@ -79,9 +79,8 @@ function sourceLink(citation, metadata) {
     return `https://doi.org/${encodeURI(doi)}`;
 }
 
-function sourcesForAnswer(answer, ledger = []) {
-    let objects = {};
-    try { objects = JSON.parse(localStorage.getItem('referenceObject') || '{}') || {}; } catch { /* citations still render */ }
+function sourcesForAnswer(answer, ledger = [], storedSources = null) {
+    if (Array.isArray(storedSources)) return storedSources.filter(row => row && Number.isInteger(row.number) && typeof row.title === 'string').map(row => ({number:row.number,title:row.title,url:/^https:\/\//i.test(row.url || '') ? row.url : ''}));
     const {references} = splitReferenceSection(answer);
     const lines = references.split(/\n(?=\s*(?:\[\d+\]|\d+\.))/);
     const fromAnswer = lines.flatMap(line => {
@@ -91,47 +90,36 @@ function sourcesForAnswer(answer, ledger = []) {
         const citation = match[3].split(/\n(?=\s*(?:DietNerd|ChronicNerd) is\b)/i)[0].trim();
         const title = citation.slice(0, 240);
         if (!title) return [];
-        const marker = key => String(key).match(/^\s*(?:\[(\d+)\]|(\d+)\.)/);
-        const normalize = value => String(value).replace(/^\s*(?:\[\d+\]|\d+\.)\s*/, '').replace(/\s+/g, ' ').trim().toLowerCase();
-        const metadata = Object.entries(objects).find(([key]) => {
-            const match = marker(key);
-            const expected = normalize(key);
-            const actual = normalize(citation);
-            return match && Number(match[1] || match[2]) === number &&
-                (actual.includes(expected) || expected.includes(actual)) && Math.min(actual.length, expected.length) > 24;
-        });
-        const ledgerUrl = (Array.isArray(ledger) ? ledger : []).find(row => row?.citation_marker === `[${number}]`)?.source_url;
-        const matchUrl = metadata?.[1]?.URL;
-        const url = (/^https:\/\//i.test(matchUrl || '') ? matchUrl : '') ||
-            (/^https:\/\//i.test(ledgerUrl || '') ? ledgerUrl : '') || sourceLink(citation, metadata?.[1]);
+        const normalize = value => String(value).replace(/[^a-z0-9]+/gi, ' ').trim().toLowerCase();
+        const ledgerUrl = (Array.isArray(ledger) ? ledger : []).find(row => row?.citation_marker === `[${number}]` && row?.source_title && normalize(citation).includes(normalize(row.source_title)) && normalize(row.source_title).length > 12)?.source_url;
+        const url = (/^https:\/\//i.test(ledgerUrl || '') ? ledgerUrl : '') || sourceLink(citation);
         return [{number, title, url}];
     });
     return [...new Map(fromAnswer.map(source => [source.number, source])).values()].sort((a,b)=>a.number-b.number);
 }
 
 function appendInChatSources(content, sources) {
-    if (!sources.length) return;
     const section = document.createElement('section');
     section.className = 'in-chat-sources';
     const heading = document.createElement('h3');
     heading.textContent = 'Sources';
     section.append(heading);
+    if (!sources.length) {
+        const empty = document.createElement('p');
+        empty.className = 'sources-empty';
+        empty.textContent = 'No linked articles were provided for this answer.';
+        section.append(empty);
+    }
     sources.forEach(source => {
-        const row = document.createElement('button');
-        row.type = 'button';
+        const row = document.createElement(source.url ? 'a' : 'span');
         row.className = 'in-chat-source';
+        if (source.url) { row.href = source.url; row.target = '_blank'; row.rel = 'noopener noreferrer'; }
+        else row.title = 'Original article link unavailable';
         const number = document.createElement('span');
         number.textContent = `[${source.number}]`;
         const title = document.createElement('span');
         title.textContent = source.title;
         row.append(number, title);
-        row.addEventListener('click', () => {
-            openSourcesPanel(sources);
-            if (source.url) {
-                const card = Array.from(document.querySelectorAll('.source-card')).find(item => item.querySelector('.sources-kicker')?.textContent === `Reference ${source.number}`);
-                card?.scrollIntoView({block:'nearest',behavior:'smooth'});
-            }
-        });
         section.append(row);
     });
     content.append(section);
@@ -144,15 +132,20 @@ function appendChatMessage(role, text, references = []) {
     article.className = `chat-message ${role}`;
     const avatar = document.createElement('span');
     avatar.className = `${role}-avatar`;
-    avatar.textContent = role === 'assistant' ? 'D' : 'You';
+    if (role === 'assistant') {
+        const logo = document.createElement('img');
+        logo.src = 'assets/dietnerd_mark.svg';
+        logo.alt = '';
+        avatar.append(logo);
+        avatar.setAttribute('aria-label', 'DietNerd');
+    } else avatar.textContent = 'You';
     const content = document.createElement('div');
     content.className = 'message-content';
-    const answerBody = role === 'assistant' && Array.isArray(references) && references.length
+    const answerBody = role === 'assistant' && Array.isArray(references)
         ? splitReferenceSection(text).body
         : text;
     content.innerHTML = role === 'assistant' ? formatText(answerBody) : String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;');
     article.append(avatar, content);
-    if (role === 'assistant' && Array.isArray(references)) appendInChatSources(content, references);
     thread.appendChild(article);
     enterConversationMode();
     thread.scrollTop = thread.scrollHeight;
@@ -228,8 +221,9 @@ async function renderSelectedConversation(conversationId) {
         clearChatThread();
         entries.forEach((entry) => {
             appendChatMessage('user', entry.raw_question || '');
-            const content = appendChatMessage('assistant', entry.answer || '', sourcesForAnswer(entry.answer || '', entry.evidence_ledger || []));
+            const content = appendChatMessage('assistant', entry.answer || '', []);
             appendEvidenceLedger(content, entry.evidence_ledger || []);
+            appendInChatSources(content, sourcesForAnswer(entry.answer || '', [], Array.isArray(entry.sources) && entry.sources.length ? entry.sources : null));
         });
         document.getElementById('generate-pdf-button').classList.toggle('hidden', !entries.length);
         if (!entries.length) thread.innerHTML = '<div class="history-loading empty-history">This conversation has no completed answers yet.</div>';
@@ -301,7 +295,7 @@ const getAnswer = async (question) => {
             localStorage.setItem('referenceObject', JSON.stringify(cached.citations_obj || {}));
             localStorage.setItem('citations', JSON.stringify(cached.citations || []));
         } catch { /* answer still renders when browser storage is full */ }
-        return cached.end_output.replace(/(^|\n)(\d+)\.\s/g, '\n\n$2. ');
+        return {answer: cached.end_output, sources: sourcesForAnswer(cached.end_output, [], result.sources || null)};
     } catch (err) {
         console.error('Fetch error:', err);
         throw err;
@@ -723,7 +717,8 @@ function appendPendingMessage() {
     article.className = 'chat-message assistant pending';
     const avatar = document.createElement('span');
     avatar.className = 'assistant-avatar';
-    avatar.textContent = 'D';
+    avatar.innerHTML = '<img src="assets/dietnerd_mark.svg" alt="">';
+    avatar.setAttribute('aria-label', 'DietNerd');
     const content = document.createElement('div');
     content.className = 'message-content';
     const status = document.createElement('p');
@@ -826,8 +821,8 @@ function appendEvidenceLedger(content, ledger) {
     content.append(details);
 }
 
-function showAssistantAnswer(answer, ledger = [], question = '') {
-    const content = appendChatMessage('assistant', answer, sourcesForAnswer(answer, ledger));
+function showAssistantAnswer(answer, ledger = [], question = '', storedSources = null) {
+    const content = appendChatMessage('assistant', answer, []);
     appendEvidenceLedger(content, ledger);
     if (ChronicNerdAddons.enabled('notebook')) {
         const button = document.createElement('button');
@@ -839,10 +834,21 @@ function showAssistantAnswer(answer, ledger = [], question = '') {
                 ChronicNerdAddons.saveNote(question, answer, ledger.map(row => row.source_url));
                 button.textContent = 'Saved to notebook';
                 button.disabled = true;
-            } catch { button.textContent = 'Could not save locally'; }
+            } catch (error) {
+                console.error('Notebook save failed:', error);
+                const reason = error instanceof Error ? error.message : String(error);
+                button.textContent = 'Could not save locally';
+                button.title = `Notebook save failed: ${reason}`;
+                button.setAttribute('aria-label', `Could not save locally: ${reason}`);
+                const detail = document.createElement('small');
+                detail.className = 'notebook-save-error';
+                detail.textContent = reason;
+                button.after(detail);
+            }
         });
         content.append(button);
     }
+    appendInChatSources(content, sourcesForAnswer(answer, ledger, storedSources));
     document.getElementById('generate-pdf-button').classList.remove('hidden');
 }
 
@@ -925,7 +931,7 @@ async function generateAnswer(question) {
         }
         const result = await runGeneration(question, pending);
         pending.remove();
-        showAssistantAnswer(result.end_output, result.evidence_ledger || [], question);
+        showAssistantAnswer(result.end_output, result.evidence_ledger || [], question, result.session_memory_entry?.sources || null);
         refreshTitleAfterAnswer(getConversationId());
     } catch (err) {
         console.error(err);
@@ -942,7 +948,7 @@ async function answerFromAttachment(question) {
     try {
         const result = await runGeneration(question, pending);
         pending.remove();
-        showAssistantAnswer(result.end_output, result.evidence_ledger || [], question);
+        showAssistantAnswer(result.end_output, result.evidence_ledger || [], question, result.session_memory_entry?.sources || null);
         refreshTitleAfterAnswer(getConversationId());
     } catch (err) {
         console.error(err);
@@ -1040,7 +1046,7 @@ document.getElementById('submit').addEventListener('click', async () => {
     }
     if (cachedAnswer) {
         setComposerBusy(false);
-        showAssistantAnswer(cachedAnswer, [], question);
+        showAssistantAnswer(cachedAnswer.answer, [], question, cachedAnswer.sources);
         refreshTitleAfterAnswer(getConversationId());
         return;
     }
@@ -1105,7 +1111,7 @@ document.getElementById('new-conversation').addEventListener('click', () => {
     document.getElementById('conversation-select').value = '';
     document.querySelectorAll('.conversation-row.active').forEach(row => { row.classList.remove('active'); row.removeAttribute('aria-current'); });
     document.getElementById('question').value = '';
-    document.getElementById('chat-thread').innerHTML = '<div class="welcome-message"><span class="assistant-avatar">D</span><div><h2>Start a new conversation</h2><p>Ask a diet or nutrition question to begin.</p></div></div>';
+    document.getElementById('chat-thread').innerHTML = '<div class="welcome-message"><span class="assistant-avatar" aria-label="DietNerd"><img src="assets/dietnerd_mark.svg" alt=""></span><div><h2>Start a new conversation</h2><p>Ask a diet or nutrition question to begin.</p></div></div>';
     document.getElementById('similarQuestions').style.display = 'none';
     document.getElementById('generate-pdf-button').classList.add('hidden');
     document.querySelector('.hint').textContent = '';

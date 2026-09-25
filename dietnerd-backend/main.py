@@ -104,6 +104,9 @@ def create_tables():
                 FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id) ON DELETE CASCADE
             )
         """)
+        cursor.execute("SHOW COLUMNS FROM user_session_memory LIKE 'sources_json'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE user_session_memory ADD COLUMN sources_json LONGTEXT")
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_conversation_summary (
                 email VARCHAR(255) NOT NULL,
@@ -498,7 +501,11 @@ async def cached_answer(query: QueryModel, email: str = Depends(current_user)):
         cached_answer_text = json.loads(cached_payload)["end_output"]
     except (TypeError, ValueError, KeyError, IndexError):
         raise HTTPException(status_code=500, detail="Cached answer has an invalid format.")
+    from answer_sources import extract_answer_sources
+    cached_obj = json.loads(cached_payload)
+    cached_sources = extract_answer_sources(cached_answer_text, cached_obj.get("citations_obj", {}))
     append_session_memory(query.email, conversation_id, {
+        "sources": cached_sources,
         "request_id": request_id,
         "raw_question": query.user_query,
         "standalone_question": standalone_question,
@@ -514,6 +521,7 @@ async def cached_answer(query: QueryModel, email: str = Depends(current_user)):
     threading.Thread(target=update_conversation_title, args=(query.email, conversation_id), daemon=True).start()
     return {
         "cached_payload": cached_payload,
+        "sources": cached_sources,
         "conversation_id": conversation_id,
         "request_id": request_id,
     }
@@ -563,11 +571,17 @@ def get_session_memory(email: str, conversation_id: str):
     try:
         cursor = connection.cursor(dictionary=True)
         cursor.execute(
-            "SELECT query_number, request_id, raw_question, standalone_question, answer "
+            "SELECT query_number, request_id, raw_question, standalone_question, answer, sources_json "
             "FROM user_session_memory WHERE email = %s AND conversation_id = %s ORDER BY query_number",
             (email, conversation_id),
         )
-        return cursor.fetchall()
+        rows = cursor.fetchall()
+        for row in rows:
+            try:
+                row["sources"] = json.loads(row.pop("sources_json") or "[]")
+            except (ValueError, TypeError):
+                row["sources"] = []
+        return rows
     finally:
         connection.close()
 
@@ -1124,11 +1138,13 @@ def process_user_query(user_query, request_id, email, conversation_id):
     return_obj["citations_obj"] = updated_citations
     return_obj["citations"] = citations
     
+    from answer_sources import extract_answer_sources
     session_memory_entry = {
         "request_id": request_id,
         "raw_question": raw_question,
         "standalone_question": user_query,
         "answer": final_output,
+        "sources": extract_answer_sources(final_output, updated_citations, return_obj["evidence_ledger"]),
         "evidence_ledger": return_obj["evidence_ledger"]
     }
     append_session_memory(email, conversation_id, session_memory_entry)

@@ -278,3 +278,8 @@ body:after{display:none}
 .chat-sidebar :is(button,a):focus-visible,.chat-panel :is(button,a):focus-visible,.sources-panel :is(button,a):focus-visible{outline:2px solid var(--forest-2);outline-offset:2px}
 @media(prefers-reduced-motion:reduce){.icon-button,.header-button,.composer #submit,.composer #attach-button,.delete-link,.history-toggle,.in-chat-source,.source-card a,.addon-save-button,.delete-dialog-actions button{transition:none!important;transform:none!important}}
 .chat-message.assistant .message-content>li{list-style-position:inside;padding-left:18px;text-indent:-18px;margin-left:10px}
+.assistant-avatar{overflow:hidden;background:#e8f2e8}.assistant-avatar img{display:block;width:82%;height:82%;object-fit:contain}
+.in-chat-source{text-decoration:none}.in-chat-source:not(a){cursor:default;color:var(--muted)}
+.in-chat-sources .sources-empty{margin:4px 0;font-size:12px}
+.in-chat-source span:last-child{white-space:normal;overflow-wrap:anywhere}
+.notebook-save-error{display:block;margin:5px 0;color:#9a453d;font:500 11px/1.4 "DM Sans",sans-serif;overflow-wrap:anywhere}

@@ -1,5 +1,7 @@
 """Database operations for durable conversation turns."""
 
+import json
+
 
 def append_turn(connection_factory, email, conversation_id, entry):
     """Append one turn and atomically allocate its per-conversation number."""
@@ -23,8 +25,8 @@ def append_turn(connection_factory, email, conversation_id, entry):
         )
         cursor.execute(
             "INSERT INTO user_session_memory "
-            "(email, conversation_id, query_number, request_id, raw_question, standalone_question, answer) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            "(email, conversation_id, query_number, request_id, raw_question, standalone_question, answer, sources_json) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
             (
                 email,
                 conversation_id,
@@ -33,6 +35,7 @@ def append_turn(connection_factory, email, conversation_id, entry):
                 entry.get("raw_question"),
                 entry.get("standalone_question"),
                 entry.get("answer"),
+                json.dumps(entry.get("sources") or []),
             ),
         )
         connection.commit()
