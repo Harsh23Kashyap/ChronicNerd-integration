@@ -8,6 +8,16 @@ function getConversationId() {
     return temporaryChat ? null : (sessionStorage.getItem('dietnerd_conversation_id') || null);
 }
 
+function emptyStateMarkup(temporary = false) {
+    const heading = temporary ? 'Temporary workspace' : 'Start a new conversation';
+    const intro = temporary ? 'Ask a question here. This chat is not saved to your account.' : 'Ask a diet or nutrition question to begin.';
+    const prompts = temporary
+        ? ['What does research say about daily fiber?', 'How does hydration affect exercise?', 'Which foods contain iron?']
+        : ['How much protein do I need daily?', 'Is coffee good for heart health?', 'What helps with iron deficiency?'];
+    const buttons = prompts.map(text => `<button type="button" class="example-question">${text}</button>`).join('');
+    return `<div class="welcome-message"><span class="assistant-avatar" aria-label="DietNerd"><img src="assets/dietnerd_mark.svg" alt=""></span><div><h2>${heading}</h2><p>${intro}</p><div id="example-questions" class="starter-questions" aria-label="Example questions">${buttons}</div></div></div>`;
+}
+
 function clearChatThread() {
     document.getElementById('chat-thread').innerHTML = '';
 }
@@ -1177,8 +1187,7 @@ document.getElementById('temporary-chat').addEventListener('click', () => {
     document.getElementById('attach-button').title = 'Attachments are unavailable in temporary chat';
     document.getElementById('temporary-chat').setAttribute('aria-pressed', 'true');
     document.getElementById('chat-title').textContent = 'Temporary chat';
-    document.querySelector('.welcome-message h2').textContent = 'Temporary workspace';
-    document.querySelector('.welcome-message p').textContent = 'Ask a question here. This chat is not saved to your account.';
+    document.getElementById('chat-thread').innerHTML = emptyStateMarkup(true);
     document.getElementById('delete-conversation').hidden = true;
     document.getElementById('attach-button').disabled = true;
     document.getElementById('existing-attachments').hidden = true;
@@ -1205,7 +1214,7 @@ document.getElementById('new-conversation').addEventListener('click', () => {
     document.getElementById('conversation-select').value = '';
     document.querySelectorAll('.conversation-row.active').forEach(row => { row.classList.remove('active'); row.removeAttribute('aria-current'); });
     document.getElementById('question').value = '';
-    document.getElementById('chat-thread').innerHTML = '<div class="welcome-message"><span class="assistant-avatar" aria-label="DietNerd"><img src="assets/dietnerd_mark.svg" alt=""></span><div><h2>Start a new conversation</h2><p>Ask a diet or nutrition question to begin.</p></div></div>';
+    document.getElementById('chat-thread').innerHTML = emptyStateMarkup();
     document.getElementById('similarQuestions').style.display = 'none';
     document.getElementById('generate-pdf-button').classList.add('hidden');
     document.querySelector('.hint').textContent = '';

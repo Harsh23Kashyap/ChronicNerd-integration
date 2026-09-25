@@ -5,3 +5,5 @@
 .recovery-warning:before { content: "◇"; display: inline-block; width: 16px; color: var(--forest-2); font-size: 13px; vertical-align: baseline; }
 
 .signup-password-hint{color:var(--muted);font-size:13px;line-height:1.45;margin:3px 0 16px;text-align:left}
+
+.email-feedback{min-height:0;margin:7px 2px 0;text-align:left;color:var(--danger);font:500 12px/1.45 "DM Sans",sans-serif}.email-feedback:empty{display:none}

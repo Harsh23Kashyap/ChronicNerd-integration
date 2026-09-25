@@ -70,6 +70,9 @@
         const password = document.getElementById('register-password').value;
         const confirm = document.getElementById('register-confirm').value;
         const errorEl = document.getElementById('register-error');
+        const emailFeedback = document.getElementById('register-email-feedback');
+        emailFeedback.textContent = '';
+        document.getElementById('register-email').removeAttribute('aria-invalid');
         errorEl.textContent = '';
         if (!email || !password) { errorEl.textContent = 'Please enter an email and a password.'; return; }
         if (password.length < 8) { errorEl.textContent = 'Password must be at least 8 characters.'; return; }
@@ -78,7 +81,14 @@
         setBusy(button, true, 'Creating account...');
         try {
             const res = await post('/register', { email, password });
-            if (!res.ok) { errorEl.textContent = await readError(res, 'Could not create the account.'); return; }
+            if (!res.ok) {
+                const message = await readError(res, 'Could not create the account.');
+                if (res.status === 409 && /account with this email already exists/i.test(message)) {
+                    emailFeedback.textContent = 'This email is already registered. Try signing in.';
+                    document.getElementById('register-email').setAttribute('aria-invalid', 'true');
+                } else errorEl.textContent = message;
+                return;
+            }
             const data = await res.json();
             sessionStorage.setItem('dietnerd_user', data.email);
             window.location.href = 'index.html';
@@ -92,3 +102,8 @@
     show('login-form');
     currentUser().then((email) => { if (email) window.location.href = 'index.html'; });
 })();
+
+document.getElementById('register-email').addEventListener('input', () => {
+    document.getElementById('register-email-feedback').textContent = '';
+    document.getElementById('register-email').removeAttribute('aria-invalid');
+});
