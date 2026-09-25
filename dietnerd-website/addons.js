@@ -24,7 +24,7 @@
         if (!storageKey) return [];
         try {
             const entries = JSON.parse(localStorage.getItem(storageKey) || '[]');
-            return Array.isArray(entries) ? entries.filter(item => item && typeof item === 'object') : [];
+            return Array.isArray(entries) ? entries.filter(item => item && typeof item === 'object' && typeof item.id === 'string' && typeof item.answer === 'string' && typeof item.question === 'string') : [];
         } catch { return []; }
     }
     function saveNote(question, answer, sources) {

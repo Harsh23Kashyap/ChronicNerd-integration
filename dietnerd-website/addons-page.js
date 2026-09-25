@@ -29,13 +29,14 @@
             const article = document.createElement('article');
             article.className = 'note';
             const time = document.createElement('time');
-            time.textContent = new Date(entry.savedAt).toLocaleString();
+            const saved = new Date(entry.savedAt);
+            time.textContent = Number.isNaN(saved.getTime()) ? 'Saved research' : saved.toLocaleString();
             const title = document.createElement('h3');
             title.textContent = entry.question || 'Research question';
             const body = document.createElement('p');
             body.textContent = entry.answer || '';
             article.append(time, title, body);
-            (entry.sources || []).forEach(url => {
+            (Array.isArray(entry.sources) ? entry.sources : []).forEach(url => {
                 if (typeof url !== 'string' || !/^https:\/\//.test(url)) return;
                 const link = document.createElement('a');
                 link.href = url;
