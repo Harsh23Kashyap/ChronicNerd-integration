@@ -285,3 +285,9 @@ body:after{display:none}
 .source-analysis-link{font-weight:700;margin-top:13px}.source-card a:not(.source-analysis-link){font-size:11px;margin-top:9px}.in-chat-source[href^="reference.html"]{font-weight:650}
 
 .source-card .source-summary{margin:8px 0 0;color:var(--ink);font-size:12px;line-height:1.6;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+
+.account-dropdown{min-width:236px;padding:8px;border:1px solid #cbd9d1;border-radius:18px;background:#fffdf7;box-shadow:0 20px 50px rgba(23,63,53,.17)}
+.account-dropdown .account-menu-link,.account-dropdown button{display:flex;align-items:center;width:100%;min-height:43px;padding:10px 13px;margin:0;border:0;border-radius:10px;background:transparent;color:var(--forest);font:600 13px "DM Sans",sans-serif;line-height:1.35;text-decoration:none;cursor:pointer}
+.account-dropdown .account-menu-link:hover,.account-dropdown button:hover,.account-dropdown :is(button,a):focus-visible{background:#eaf0e9;color:#12372e;outline:2px solid transparent}
+.account-dropdown #logout-link{margin-top:5px;border-top:1px solid var(--line);border-radius:0 0 10px 10px;color:var(--danger)}
+.account-dropdown #logout-link:hover{background:#f7ebe7}

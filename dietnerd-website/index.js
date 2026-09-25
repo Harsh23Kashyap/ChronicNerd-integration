@@ -154,7 +154,19 @@ function appendInChatSources(content, sources) {
     content.append(section);
 }
 
-function appendChatMessage(role, text, references = []) {
+function reconcileInlineCitations(answer, sources) {
+    const refs = sourcesForAnswer(answer, [], Array.isArray(sources) && sources.length ? sources : null);
+    const labels = new Set(refs.map(source => String(source.number)));
+    const pmids = new Map(refs.filter(source => sourcePmid(source)).map(source => [sourcePmid(source), String(source.number)]));
+    const body = splitReferenceSection(answer).body;
+    return body.replace(/\[\s*(\d*)\s*\]/g, (match, raw) => {
+        if (!raw) return '';
+        if (labels.has(raw)) return `[${raw}]`;
+        return pmids.has(raw) ? `[${pmids.get(raw)}]` : '';
+    }).replace(/\s+([.,;:])/g, '$1');
+}
+
+function appendChatMessage(role, text, references = [], storedSources = null) {
     const thread = document.getElementById('chat-thread');
     thread.querySelector('.welcome-message')?.remove();
     const article = document.createElement('article');
@@ -171,7 +183,7 @@ function appendChatMessage(role, text, references = []) {
     const content = document.createElement('div');
     content.className = 'message-content';
     const answerBody = role === 'assistant' && Array.isArray(references)
-        ? splitReferenceSection(text).body
+        ? reconcileInlineCitations(text, storedSources)
         : text;
     content.innerHTML = role === 'assistant' ? formatText(answerBody) : String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;');
     article.append(avatar, content);
@@ -207,8 +219,7 @@ async function refreshConversationList() {
         row.textContent = conversation.title || 'Untitled conversation';
         list.appendChild(row);
     });
-    const latestId = (data.conversations || [])[0]?.conversation_id || '';
-    const selectedId = (data.conversations || []).some(c => c.conversation_id === currentId) ? currentId : latestId;
+    const selectedId = (data.conversations || []).some(c => c.conversation_id === currentId) ? currentId : '';
     select.value = selectedId;
     list.querySelectorAll('.conversation-row').forEach(row => {
         const active = row.dataset.conversationId === selectedId;
@@ -216,11 +227,6 @@ async function refreshConversationList() {
         if (active) row.setAttribute('aria-current', 'true');
         else row.removeAttribute('aria-current');
     });
-    if (selectedId && selectedId !== currentId && !questionInFlight &&
-        !document.querySelector('#chat-thread .chat-message.user')) {
-        sessionStorage.setItem('dietnerd_conversation_id', selectedId);
-        await renderSelectedConversation(selectedId);
-    }
 }
 
 function refreshTitleAfterAnswer(conversationId) {
@@ -233,6 +239,19 @@ function refreshTitleAfterAnswer(conversationId) {
 }
 
 let conversationLoadToken = 0;
+async function readConversationHistory(conversationId) {
+    let lastError;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            const response = await apiFetch(`/session_memory?conversation_id=${encodeURIComponent(conversationId)}`);
+            if (response.ok || (response.status !== 502 && response.status !== 503 && response.status !== 504)) return response;
+            lastError = new Error(`Research server temporarily unavailable (${response.status}).`);
+        } catch (error) { lastError = error; }
+        if (attempt < 2) await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 900));
+    }
+    throw lastError || new Error('Could not load this conversation.');
+}
+
 async function renderSelectedConversation(conversationId) {
     if (!conversationId) return;
     const token = ++conversationLoadToken;
@@ -241,7 +260,7 @@ async function renderSelectedConversation(conversationId) {
     const thread = document.getElementById('chat-thread');
     thread.innerHTML = '<div class="history-loading" role="status" aria-live="polite"><span class="history-loading-icon" aria-hidden="true"></span><span>Opening conversation...</span><span class="history-loading-line"></span><span class="history-loading-line short"></span></div>';
     try {
-        const response = await apiFetch(`/session_memory?conversation_id=${encodeURIComponent(conversationId)}`);
+        const response = await readConversationHistory(conversationId);
         if (token !== conversationLoadToken) return;
         if (!response.ok) throw new Error(await DietNerdAPI.readError(response, 'Could not load this conversation.'));
         const data = await response.json();
@@ -250,7 +269,7 @@ async function renderSelectedConversation(conversationId) {
         clearChatThread();
         entries.forEach((entry) => {
             appendChatMessage('user', entry.raw_question || '');
-            const content = appendChatMessage('assistant', entry.answer || '', []);
+            const content = appendChatMessage('assistant', entry.answer || '', [], entry.sources || null);
             appendEvidenceLedger(content, entry.evidence_ledger || []);
             appendInChatSources(content, sourcesForAnswer(entry.answer || '', [], Array.isArray(entry.sources) && entry.sources.length ? entry.sources : null));
         });
@@ -684,6 +703,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const existingAttachmentsElement = document.getElementById('existing-attachments');
 
     refreshExistingAttachments().catch((err) => { document.getElementById('attachment-label').textContent = err.message; });
+    document.getElementById('new-conversation').click();
     refreshConversationList();
 
     fileInput.addEventListener('change', async function () {
@@ -854,7 +874,7 @@ function appendEvidenceLedger(content, ledger) {
 }
 
 function showAssistantAnswer(answer, ledger = [], question = '', storedSources = null) {
-    const content = appendChatMessage('assistant', answer, []);
+    const content = appendChatMessage('assistant', answer, [], storedSources);
     appendEvidenceLedger(content, ledger);
     appendInChatSources(content, sourcesForAnswer(answer, ledger, storedSources));
     document.getElementById('generate-pdf-button').classList.remove('hidden');
@@ -894,7 +914,12 @@ async function runGeneration(userQuery, pending) {
             if (lostAt && Date.now() - lostAt > 60000) {
                 window.clearInterval(reconnectTimer);
                 eventSource.close();
-                reject(new Error('Research connection did not recover. Open this conversation from history to check whether the answer finished.'));
+                readConversationHistory(data.conversation_id).then(async history => {
+                    if (!history.ok) throw new Error('Could not retrieve the saved research answer.');
+                    const saved = (await history.json()).entries?.find(entry => entry.request_id === data.request_id);
+                    if (saved?.answer) resolve({end_output:saved.answer, session_memory_entry:saved});
+                    else reject(new Error('Research connection did not recover. Open this conversation from history to check whether the answer finished.'));
+                }).catch(reject);
             }
         }, 1000);
         eventSource.onopen = () => {
