@@ -1,144 +1,37 @@
-/**
- * Retrieves the value of the specified query parameter from the URL.
- *
- * @param {string} name - The name of the query parameter to retrieve.
- * @return {string} The value of the specified query parameter.
- */
-function getQueryParameter(name) {
-    const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get(name);
-}
-
-/**
- * Replaces specific text patterns in the input text and returns the formatted text.
- *
- * @param {string} input - The input text to be formatted.
- * @return {string} The formatted text after replacing specific patterns.
- */
-const formatText = (input) => {
-    // Replace \n with <br>
-    let formattedText = input.replace(/\n/g, '<br>');
-
-    // Replace **text** with <strong>text</strong>
-    formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    //Replace ### text with bold
-    formattedText = formattedText.replace(/### (.*?)(<br>|$)/g, '<strong>$1</strong>$2');
-
-
-    // Replace "-" with <li> and wrap in <ul>
-    formattedText = formattedText.replace(/- (.*?)(<br>|$)/g, '<li>$1</li>');
-
-    return formattedText;
-}
-
-/**
- * Parses a citation string into its components.
- *
- * @param {string} citation - The citation string to be parsed.
- * @return {Array} An array containing the authors, title, and journal of the citation.
- */
-function parseCitation(citation) {
-    // Split the citation into its components using regex
-    citation = citation.slice(1);
-    const firstDotIndex = citation.indexOf('.');
-    const secondDotIndex = citation.indexOf('.', firstDotIndex + 1);
-    const authors = citation.substring(3, firstDotIndex).trim();
-    const title = citation.substring(firstDotIndex + 1, secondDotIndex).trim();
-    const journal = citation.substring(secondDotIndex + 1).trim();
-    return [authors, title, journal];
-}
-
-
-/**
- * Loads the content of a reference based on the reference number provided in the query parameter.
- *
- * @return {void} This function does not return anything.
- */
-function loadReferenceContent() {
-    const refNumber = getQueryParameter('ref');
-    const referenceObject = JSON.parse(localStorage.getItem('referenceObject'));
-    
-    let summary = 'Reference content not found';
-    let authors = '';
-    let title = '';
-    let journal = '';
-    let PMCID = '';
-    if (referenceObject) {
-        // Assuming the referenceObject has the needed structure
-        console.log(referenceObject);
-        for (citation in referenceObject) {
-            let citation_num = extractCitationNumber(citation);
-            console.log(citation_num)
-            console.log(refNumber)
-            if (`[${citation_num}]` == refNumber || citation_num == refNumber) {
-                console.log('Found Match')
-                console.log(citation)
-                const info = parseCitation(citation)
-                console.log(info)
-                authors = info[0];
-                title = info[1];
-                journal = info[2];
-                summary = referenceObject[citation]['Summary'];
-                PMCID = referenceObject[citation]['PMCID']
-                url = referenceObject[citation]["URL"];
-                console.log(url);
-                localStorage.setItem('url', url);
-                break;
-            }
-        }
-
-        
-        let content = summary || 'Reference content not found.';
-
-        let fullText;
-        if (PMCID == 'None') {
-            fullText = false;
-        } else {
-            fullText = true;
-        }
-        
-        content = `<strong><a href=${url} target="_blank">${title}</a></br>${authors}<br>${journal}</strong><br><br>${content}`
-        document.getElementById('reference-content').innerHTML = formatText(content);
-    } else {
-        document.getElementById('reference-content').innerText = 'No reference data found.';
+const params = new URLSearchParams(window.location.search);
+const pmid = params.get('pmid');
+const target = document.getElementById('reference-content');
+function paragraph(text, parent) { const p=document.createElement('p'); p.textContent=text; parent.append(p); return p; }
+function parseSections(summary) {
+    const sections=[]; let active=null;
+    for(const line of String(summary||'').split(/\r?\n/)) {
+        const match=line.trim().match(/^(?:\*\*)?\s*(\d{1,2})[.)]\s*([^:]+):?(?:\*\*)?\s*(.*)$/);
+        if(match){active={number:match[1],title:match[2].replace(/\*\*/g,'').trim(),lines:[]};sections.push(active);if(match[3]) active.lines.push(match[3]);}
+        else if(active && line.trim()) active.lines.push(line.trim());
     }
+    return sections;
 }
-
-
-/**
- * Extracts the citation number from the citation string.
- *
- * @param {string} citation - The citation string to extract the number from.
- * @return {number|null} The extracted citation number or null if not found.
- */
-function extractCitationNumber(citation) {
-    const match = citation.match(/^\[?(\d+)\]?\.?/);
-    if (match) {
-        return parseInt(match[1], 10);
-    }
-    return null;
+function render(article) {
+    target.replaceChildren();
+    const head=document.createElement('div');head.className='paper-heading';
+    const title=document.createElement('h2');title.textContent=article.title||'Article analysis';head.append(title);
+    if(article.citation){const citation=document.createElement('p');citation.className='citation';citation.textContent=article.citation;head.append(citation);}
+    const meta=document.createElement('div');meta.className='paper-meta';if(article.pmid){const id=document.createElement('span');id.textContent=`PMID ${article.pmid}`;meta.append(id);}head.append(meta);target.append(head);
+    paragraph('This is an automated paper summary. Check the original article for methods, numbers, and limitations before relying on it.',target).className='reading-note';
+    if(/^https:\/\//i.test(article.url||'')){const link=document.getElementById('read-article');link.href=article.url;link.hidden=false;}
+    const sections=parseSections(article.summary);
+    if(!sections.length){const empty=document.createElement('div');empty.className='empty-analysis';paragraph(article.summary||'An analysis is not available for this article yet. Use Read Article to review the original paper.',empty);target.append(empty);return;}
+    const grid=document.createElement('div');grid.className='analysis-grid';
+    sections.forEach(section=>{const block=document.createElement('section');block.className='analysis-section';const h=document.createElement('h3');const number=document.createElement('span');number.className='number';number.textContent=section.number;h.append(number,document.createTextNode(section.title));block.append(h);paragraph(section.lines.join('\n'),block);grid.append(block);});target.append(grid);
 }
-
-
-/**
- * Sets up the redirect button functionality.
- */
-function setupRedirectButton() {
-    const redirectButton = document.getElementById('redirect-button');
-    const redirectUrl = localStorage.getItem("url"); // Change this to your desired URL
-    redirectButton.addEventListener('click', () => {
-        window.location.href = redirectUrl;
-    });
+async function load(){
+    if(!pmid||!/^\d{1,12}$/.test(pmid)){target.textContent='Choose an article from the Sources list to view its analysis.';return;}
+    const original=document.getElementById('read-article');
+    original.href=`https://pubmed.ncbi.nlm.nih.gov/${pmid}/`; original.hidden=false;
+    try{
+        const response=await DietNerdAPI.apiFetch(`/articles/${encodeURIComponent(pmid)}`);
+        if(!response.ok){target.textContent=response.status===404?'No saved analysis was found for this article. Open its original source from the Sources list.':'Could not load the article analysis. Try again.';return;}
+        render(await response.json());
+    }catch(error){target.textContent='Could not reach the research server. Try again.';}
 }
-
-/**
- * Executes when the window has finished loading.
- * Calls the functions to load reference content and set up the redirect button.
- *
- * @return {void} No return value.
- */
-window.onload = () => {
-    loadReferenceContent();
-    setupRedirectButton();
-};
-
+load();

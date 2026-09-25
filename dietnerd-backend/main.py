@@ -614,6 +614,29 @@ def set_conversation_summary(email: str, conversation_id: str, summary: str):
 def append_session_memory(email: str, conversation_id: str, entry: dict):
     return append_turn(_get_db_connection, email, conversation_id, entry)
 
+@app.get("/articles/{pmid}")
+async def read_article_analysis(pmid: str, email: str = Depends(current_user)):
+    if not pmid.isdigit() or len(pmid) > 12:
+        raise HTTPException(status_code=404, detail="Article analysis not found.")
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT article_json FROM article_analysis WHERE article_id = %s", (pmid,))
+        row = cursor.fetchone()
+    finally:
+        connection.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Article analysis not found.")
+    try:
+        article = json.loads(row[0])
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=404, detail="Article analysis not found.")
+    if not isinstance(article, dict):
+        raise HTTPException(status_code=404, detail="Article analysis not found.")
+    return {"pmid": pmid, "title": article.get("title") or "Article analysis",
+            "citation": article.get("citation") or "", "summary": article.get("summary") or "",
+            "url": article.get("url") if str(article.get("url", "")).startswith("https://") else ""}
+
 @app.post("/conversations")
 async def new_conversation(email: str = Depends(current_user)):
     return {"conversation_id": create_conversation(email)}

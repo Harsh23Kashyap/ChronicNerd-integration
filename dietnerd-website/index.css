@@ -68,6 +68,7 @@ body.conversation-mode .chat-shell.sources-open .sources-panel{width:390px;borde
 
 .account-dropdown .account-menu-link{display:block;text-align:left;padding:10px 12px;border-radius:9px;color:var(--ink);font:500 14px "DM Sans",sans-serif;text-decoration:none}
 .account-dropdown .account-menu-link:hover,.account-dropdown .account-menu-link:focus-visible{background:rgba(23,63,53,.07)}
+.addon-save-button{border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--forest);padding:7px 10px;font:700 11px "DM Sans",sans-serif;cursor:pointer;margin-top:9px}
 
 .sidebar-addons-link{display:block;color:var(--forest);font:700 12px "DM Sans",sans-serif;text-decoration:none;border-top:1px solid var(--line);padding:12px 2px}
 .sidebar-addons-link:hover{text-decoration:underline}
@@ -269,15 +270,18 @@ body:after{display:none}
 .chat-sidebar>.conversation-list{min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#9bb3a3 transparent}
 .chat-sidebar>.sidebar-heading,.chat-sidebar>.delete-link,.chat-sidebar>.sidebar-options,.chat-sidebar>.sidebar-note{flex-shrink:0}
 @media(max-width:800px){.chat-sidebar.history-open>.conversation-list{max-height:min(58vh,480px);overflow-y:auto;-webkit-overflow-scrolling:touch}}
-.icon-button,.header-button,.composer #submit,.composer #attach-button,.delete-link,.history-toggle,.in-chat-source,.source-card a,.delete-dialog-actions button{transition:background .16s ease,color .16s ease,transform .16s ease,box-shadow .16s ease}
-.icon-button:hover,.header-button:hover,.composer #submit:not(:disabled):hover{transform:translateY(-2px)}
-.icon-button:active,.header-button:active,.composer #submit:not(:disabled):active{transform:scale(.96)}
+.icon-button,.header-button,.composer #submit,.composer #attach-button,.delete-link,.history-toggle,.in-chat-source,.source-card a,.addon-save-button,.delete-dialog-actions button{transition:background .16s ease,color .16s ease,transform .16s ease,box-shadow .16s ease}
+.icon-button:hover,.header-button:hover,.composer #submit:not(:disabled):hover,.addon-save-button:hover{transform:translateY(-2px)}
+.icon-button:active,.header-button:active,.composer #submit:not(:disabled):active,.addon-save-button:active{transform:scale(.96)}
 .delete-link:hover,.in-chat-source:hover,.source-card a:hover{text-decoration:underline;text-underline-offset:3px}
 .linked-source{cursor:pointer}.linked-source:hover{box-shadow:0 10px 28px rgba(23,63,53,.12)}
 .chat-sidebar :is(button,a):focus-visible,.chat-panel :is(button,a):focus-visible,.sources-panel :is(button,a):focus-visible{outline:2px solid var(--forest-2);outline-offset:2px}
-@media(prefers-reduced-motion:reduce){.icon-button,.header-button,.composer #submit,.composer #attach-button,.delete-link,.history-toggle,.in-chat-source,.source-card a,.delete-dialog-actions button{transition:none!important;transform:none!important}}
+@media(prefers-reduced-motion:reduce){.icon-button,.header-button,.composer #submit,.composer #attach-button,.delete-link,.history-toggle,.in-chat-source,.source-card a,.addon-save-button,.delete-dialog-actions button{transition:none!important;transform:none!important}}
 .chat-message.assistant .message-content>li{list-style-position:inside;padding-left:18px;text-indent:-18px;margin-left:10px}
 .assistant-avatar{overflow:hidden;background:#e8f2e8}.assistant-avatar img{display:block;width:82%;height:82%;object-fit:contain}
 .in-chat-source{text-decoration:none}.in-chat-source:not(a){cursor:default;color:var(--muted)}
 .in-chat-sources .sources-empty{margin:4px 0;font-size:12px}
 .in-chat-source span:last-child{white-space:normal;overflow-wrap:anywhere}
+.notebook-save-error{display:block;margin:5px 0;color:#9a453d;font:500 11px/1.4 "DM Sans",sans-serif;overflow-wrap:anywhere}
+
+.source-analysis-link{font-weight:700;margin-top:13px}.source-card a:not(.source-analysis-link){font-size:11px;margin-top:9px}.in-chat-source[href^="reference.html"]{font-weight:650}

@@ -21,6 +21,16 @@ function closeSourcesPanel() {
     panel.setAttribute('aria-hidden', 'true');
 }
 
+function sourcePmid(source) {
+    if (/^\d{1,12}$/.test(String(source.pmid || ''))) return String(source.pmid);
+    return /^https:\/\/pubmed\.ncbi\.nlm\.nih\.gov\/(\d{1,12})\/?$/i.exec(source.url || '')?.[1] || '';
+}
+
+function analysisLink(source) {
+    const pmid = sourcePmid(source);
+    return pmid ? `reference.html?pmid=${encodeURIComponent(pmid)}` : '';
+}
+
 function openSourcesPanel(sourceCards) {
     const shell = document.querySelector('.chat-shell');
     const panel = document.getElementById('sources-panel');
@@ -44,15 +54,23 @@ function openSourcesPanel(sourceCards) {
         const note = document.createElement('p');
         note.textContent = 'Retrieved citation. Claim support is not independently verified.';
         card.append(label, title, note);
+        const analysis = analysisLink(source);
+        if (analysis) {
+            const view = document.createElement('a');
+            view.className = 'source-analysis-link';
+            view.href = analysis;
+            view.textContent = 'View article analysis →';
+            card.append(view);
+            card.classList.add('linked-source');
+            card.addEventListener('click', event => { if (!event.target.closest('a')) window.location.href = analysis; });
+        }
         if (source.url && /^https:\/\//i.test(source.url)) {
             const link = document.createElement('a');
             link.href = source.url;
             link.target = '_blank';
             link.rel = 'noopener noreferrer';
-            link.textContent = 'Open original in new tab ↗';
+            link.textContent = 'Read Article ↗';
             card.append(link);
-            card.classList.add('linked-source');
-            card.addEventListener('click', event => { if (!event.target.closest('a')) link.click(); });
         }
         content.append(card);
     });
@@ -80,7 +98,7 @@ function sourceLink(citation, metadata) {
 }
 
 function sourcesForAnswer(answer, ledger = [], storedSources = null) {
-    if (Array.isArray(storedSources)) return storedSources.filter(row => row && Number.isInteger(row.number) && typeof row.title === 'string').map(row => ({number:row.number,title:row.title,url:/^https:\/\//i.test(row.url || '') ? row.url : ''}));
+    if (Array.isArray(storedSources)) return storedSources.filter(row => row && Number.isInteger(row.number) && typeof row.title === 'string').map(row => ({number:row.number,title:row.title,url:/^https:\/\//i.test(row.url || '') ? row.url : '',pmid:row.pmid || ''}));
     const {references} = splitReferenceSection(answer);
     const lines = references.split(/\n(?=\s*(?:\[\d+\]|\d+\.))/);
     const fromAnswer = lines.flatMap(line => {
@@ -93,7 +111,7 @@ function sourcesForAnswer(answer, ledger = [], storedSources = null) {
         const normalize = value => String(value).replace(/[^a-z0-9]+/gi, ' ').trim().toLowerCase();
         const ledgerUrl = (Array.isArray(ledger) ? ledger : []).find(row => row?.citation_marker === `[${number}]` && row?.source_title && normalize(citation).includes(normalize(row.source_title)) && normalize(row.source_title).length > 12)?.source_url;
         const url = (/^https:\/\//i.test(ledgerUrl || '') ? ledgerUrl : '') || sourceLink(citation);
-        return [{number, title, url}];
+        return [{number, title, url, pmid:sourcePmid({url})}];
     });
     return [...new Map(fromAnswer.map(source => [source.number, source])).values()].sort((a,b)=>a.number-b.number);
 }
@@ -111,9 +129,11 @@ function appendInChatSources(content, sources) {
         section.append(empty);
     }
     sources.forEach(source => {
-        const row = document.createElement(source.url ? 'a' : 'span');
+        const analysis = analysisLink(source);
+        const row = document.createElement(analysis || source.url ? 'a' : 'span');
         row.className = 'in-chat-source';
-        if (source.url) { row.href = source.url; row.target = '_blank'; row.rel = 'noopener noreferrer'; }
+        if (analysis) { row.href = analysis; row.setAttribute('aria-label', `View analysis for source ${source.number}: ${source.title}`); }
+        else if (source.url) { row.href = source.url; row.target = '_blank'; row.rel = 'noopener noreferrer'; }
         else row.title = 'Original article link unavailable';
         const number = document.createElement('span');
         number.textContent = `[${source.number}]`;
@@ -421,7 +441,10 @@ const formatReferences = (output) => {
             const safeRef = escapeHtml(ref);
             const citationToDisplay = `<strong>${safeRef} ${title}<br>${authors}<br>${journal}</strong>`;
 
-            return `<a href="reference.html?ref=${encodeURIComponent(ref)}" target="_blank" rel="noopener">${citationToDisplay}</a> - ${analysisText}`;
+            const pmid = String(citationObj[citation].PMID || '');
+            const original = String(citationObj[citation].URL || '');
+            const href = /^\d{1,12}$/.test(pmid) ? `reference.html?pmid=${encodeURIComponent(pmid)}` : /^https:\/\//i.test(original) ? original : '#';
+            return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener">${citationToDisplay}</a> - ${analysisText}`;
         })
         .filter(Boolean)
         .join('<br><br>');
