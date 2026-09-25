@@ -834,7 +834,15 @@ function offerSimilarQuestions(question, similar) {
     const container = document.getElementById('similarQuestions');
     const hintElement = document.querySelector('.hint');
     container.replaceChildren();
-    hintElement.textContent = 'A new answer takes about a minute. For an instant answer, pick a similar question that has already been answered.';
+    hintElement.textContent = '';
+    const disclosure = document.createElement('details');
+    disclosure.className = 'similar-disclosure';
+    const summary = document.createElement('summary');
+    summary.textContent = 'Related questions';
+    summary.title = 'Show related questions with saved answers';
+    const choices = document.createElement('div');
+    choices.className = 'similar-choices';
+    disclosure.append(summary, choices);
     const seen = new Set([question.trim().toLocaleLowerCase().replace(/\s+/g, ' ')]);
     const unique = (Array.isArray(similar) ? similar : []).filter((item) => {
         const text = String(item?.[1] || '').trim();
@@ -857,14 +865,13 @@ function offerSimilarQuestions(question, similar) {
             document.getElementById('question').value = item[1];
             document.getElementById('submit').click();
         });
-        container.appendChild(button);
+        choices.appendChild(button);
     });
+    if (unique.length) container.appendChild(disclosure);
     const original = document.createElement('button');
     original.type = 'button';
     original.className = 'generate-original';
-    original.textContent = unique.length
-        ? 'Answer my original question (about a minute)'
-        : 'No similar questions found. Answer my question (about a minute)';
+    original.textContent = 'Answer my question';
     original.addEventListener('click', () => {
         container.style.display = 'none';
         hintElement.textContent = '';
@@ -985,17 +992,13 @@ document.getElementById('question').addEventListener('keydown', (event) => {
     }
 });
 
-document.addEventListener('DOMContentLoaded', function() {
-    const questionInput = document.getElementById('question');
-    const submitButton = document.getElementById('submit');
-    const exampleQuestions = document.querySelectorAll('.example-question');
-
-    exampleQuestions.forEach(question => {
-        question.addEventListener('click', function() {
-            questionInput.value = this.textContent;
-            submitButton.click();
-        });
-    });
+document.getElementById('chat-thread').addEventListener('click', (event) => {
+    const prompt = event.target.closest('.example-question');
+    if (!prompt || questionInFlight) return;
+    const input = document.getElementById('question');
+    input.value = prompt.textContent.trim();
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('submit').click();
 });
 const composerInput = document.getElementById('question');
 composerInput.addEventListener('input', () => { composerInput.style.height = 'auto'; composerInput.style.height = `${Math.min(composerInput.scrollHeight, 140)}px`; });

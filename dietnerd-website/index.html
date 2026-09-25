@@ -48,40 +48,22 @@
         <p>Zubair Yacub @ University of Illinois Urbana Champaign</p>
     </div> -->
     <div id="container">
-        <section class="hero">
-            <div class="hero-copy">
-                <span class="eyebrow">Evidence, made understandable</span>
-                <a href="index.html"><img src="assets/dietnerd_dialogue.svg" alt="DietNerd" class="logo"></a>
-                <h1>Better questions.<br><em>Stronger evidence.</em></h1>
-                <p class="hero-text">Explore diet and nutrition research through clear answers grounded in published science.</p>
-            </div>
-            <svg class="evidence-visual" viewBox="0 0 520 360" role="img" aria-label="Scientific evidence network illustration">
-                <defs>
-                    <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d7ef72"/><stop offset="1" stop-color="#73b66b"/></linearGradient>
-                    <filter id="soft"><feGaussianBlur stdDeviation="12"/></filter>
-                </defs>
-                <circle cx="260" cy="180" r="138" fill="#f7f1df" stroke="#173f35" stroke-width="2"/>
-                <circle cx="260" cy="180" r="105" fill="none" stroke="#b8cbbf" stroke-width="1" stroke-dasharray="6 10"/>
-                <circle cx="260" cy="180" r="68" fill="#173f35"/>
-                <path d="M238 194c-25-35-11-77 39-87 8 47-5 78-39 87Z" fill="url(#leaf)"/>
-                <path d="M245 190c10-26 24-45 43-58" fill="none" stroke="#173f35" stroke-width="4" stroke-linecap="round"/>
-                <path d="M218 213c26-8 52-7 78 5" fill="none" stroke="#f3aa61" stroke-width="8" stroke-linecap="round"/>
-                <g fill="#fdfbf4" stroke="#173f35" stroke-width="2">
-                    <circle cx="111" cy="104" r="24"/><circle cx="407" cy="96" r="20"/><circle cx="425" cy="254" r="27"/><circle cx="113" cy="261" r="19"/>
-                </g>
-                <g fill="#f3aa61"><circle cx="111" cy="104" r="7"/><circle cx="407" cy="96" r="6"/><circle cx="425" cy="254" r="8"/><circle cx="113" cy="261" r="6"/></g>
-                <g stroke="#173f35" stroke-width="2" opacity=".55"><path d="M130 118 202 158"/><path d="m390 110-74 48"/><path d="m397 242-77-39"/><path d="m131 250 76-45"/></g>
-                <g class="orbit-dot" fill="#d7ef72"><circle cx="260" cy="42" r="7"/><circle cx="398" cy="180" r="5"/><circle cx="260" cy="318" r="6"/><circle cx="122" cy="180" r="5"/></g>
-                <g fill="#173f35" opacity=".18"><circle cx="55" cy="66" r="4"/><circle cx="470" cy="52" r="6"/><circle cx="480" cy="310" r="4"/><circle cx="48" cy="301" r="7"/><circle cx="90" cy="173" r="3"/><circle cx="449" cy="169" r="3"/></g>
-            </svg>
-        </section>
+        <main class="chat-shell">
+            <aside class="chat-sidebar" aria-label="Conversations">
+                <div class="sidebar-heading"><span>Conversations</span><button type="button" id="new-conversation" class="icon-button" aria-label="New conversation" title="New conversation">+</button></div>
+                <label for="conversation-select" class="visually-hidden">Choose conversation</label>
+                <select id="conversation-select" aria-label="Choose conversation"><option value="">New conversation</option></select>
+                <button type="button" id="delete-conversation" class="delete-link">Delete current conversation</button>
+                <a class="sidebar-addons-link" href="addons.html">Research add-ons</a>
+                <div class="sidebar-note"><strong>DietNerd</strong><span>Answers grounded in published research. Check important health information.</span></div>
+            </aside>
             <section class="chat-panel" aria-labelledby="chat-title">
                 <header class="chat-header"><div><span class="status-dot"></span><strong id="chat-title">DietNerd assistant</strong></div><div class="header-actions"><span>Evidence-focused</span><button id="generate-pdf-button" class="hidden header-button">Download answer</button></div></header>
                 <div id="chat-thread" class="chat-thread" role="log" aria-live="off" aria-relevant="additions">
                     <div class="welcome-message">
                         <span class="assistant-avatar">D</span>
                         <div><h2>What would you like to understand?</h2><p>Ask a diet or nutrition question. I will trace the evidence and explain what the research says.</p>
-                        <div id="example-questions" class="prompt-grid"><button class="example-question">What diet is recommended for PCOS?</button><button class="example-question">What are the pros and cons of vitamin B12?</button><button class="example-question">Does the Mediterranean diet reduce asthma symptoms in children?</button></div></div>
+                        <div id="example-questions" class="prompt-grid"><button type="button" class="example-question">What diet is recommended for PCOS?</button><button type="button" class="example-question">What are the pros and cons of vitamin B12?</button><button type="button" class="example-question">Does the Mediterranean diet reduce asthma symptoms in children?</button></div></div>
                     </div>
                 </div>
                 <p class="hint" role="status" aria-live="polite"></p>
