@@ -857,7 +857,16 @@ def _run_research_with_key(user_query, request_id, email, conversation_id, token
         # Log only the exception class and numeric provider status. Exception
         # messages may echo request headers or other sensitive content.
         status = getattr(exc, "status_code", None)
-        logging.error("Research request failed: %s (status=%s)", type(exc).__name__, status if isinstance(status, int) else "n/a")
+        cause_types = []
+        seen = set()
+        cause = exc.__cause__
+        while cause is not None and len(cause_types) < 4 and id(cause) not in seen:
+            seen.add(id(cause))
+            cause_types.append(type(cause).__name__)
+            cause = cause.__cause__
+        logging.error("Research request failed: %s (status=%s; causes=%s)",
+                      type(exc).__name__, status if isinstance(status, int) else "n/a",
+                      ">".join(cause_types) if cause_types else "none")
         loop.run_until_complete(send_update(request_id, {"end_output": "Research could not finish. Please try again.", "relevant_articles": [], "citations_obj": {}, "citations": []}))
     finally:
         if scope is not None:
