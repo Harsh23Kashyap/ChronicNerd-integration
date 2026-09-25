@@ -5,7 +5,7 @@ separately reviewed secure secret broker; this in-memory store is single-worker 
 """
 from contextvars import ContextVar, copy_context
 from concurrent.futures import ThreadPoolExecutor
-from threading import RLock
+from threading import RLock, Thread
 import time
 
 from openai import OpenAI
@@ -17,9 +17,28 @@ _lock = RLock()
 _sessions = {}  # (hashed session token, user email) -> (opaque key, monotonic expiry)
 
 
+def purge_expired():
+    """Drop expired secrets without waiting for another request to that session."""
+    with _lock:
+        now = time.monotonic()
+        for pair, (_, expiry) in list(_sessions.items()):
+            if expiry <= now:
+                _sessions.pop(pair, None)
+
+
+def _sweep_loop():
+    while True:
+        time.sleep(60)
+        purge_expired()
+
+
+Thread(target=_sweep_loop, name='byok-expiry', daemon=True).start()
+
+
 def put(token_hash, email, secret):
     if not token_hash or not email or not isinstance(secret, str) or not secret.startswith('sk-') or not 20 <= len(secret) <= 512 or any(ch.isspace() for ch in secret):
         raise ValueError('Invalid API key format.')
+    purge_expired()
     with _lock:
         _sessions[(token_hash, email)] = (secret, time.monotonic() + _TTL_SECONDS)
     return _TTL_SECONDS

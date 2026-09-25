@@ -707,9 +707,11 @@ async def set_openai_key(request: Request, email: str = Depends(current_user)):
     _require_safe_key_origin(request)
     if request.headers.get("content-type", "").split(";", 1)[0].strip() != "application/json":
         raise HTTPException(status_code=415, detail="JSON required.")
-    raw = await request.body()
-    if len(raw) > 1024:
-        raise HTTPException(status_code=413, detail="Research key request is too large.")
+    raw = bytearray()
+    async for chunk in request.stream():
+        raw.extend(chunk)
+        if len(raw) > 1024:
+            raise HTTPException(status_code=413, detail="Research key request is too large.")
     try:
         data = json.loads(raw)
         secret = data.get("api_key") if isinstance(data, dict) else None

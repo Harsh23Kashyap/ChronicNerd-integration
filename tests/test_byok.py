@@ -54,6 +54,8 @@ class ByokTest(unittest.TestCase):
             byok.put('hash', 'a@example.test', KEY)
         with patch.object(byok.time, 'monotonic', return_value=1901):
             self.assertIsNone(byok.get('hash', 'a@example.test'))
+        byok.purge_expired()
+        self.assertNotIn(("hash", "a@example.test"), byok._sessions)
         byok.put("scope-hash", "a@example.test", KEY)
         scope = byok.activate("scope-hash", "a@example.test")
         try:
