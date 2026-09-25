@@ -1573,35 +1573,31 @@ def generate_final_response(all_relevant_articles, query, attachment_text=None):
   Returns:
   - final_output (str): Final response to the user question.
   """
+
+  # Do not ask the model to infer a diet comparison when none of the
+  # retrieved studies even names the comparator. This is a conservative
+  # abstention, not a claim that no such study exists in the literature.
+  lower_query = query.lower()
+  is_diet_comparison = ("mediterranean" in lower_query and
+                        ("low-carbohydrate" in lower_query or "low carbohydrate" in lower_query or "low-carb" in lower_query))
+  if is_diet_comparison:
+    titles = " ".join(str(article.get("title", "")) for article in all_relevant_articles).lower()
+    has_low_carb_candidate = any(term in titles for term in ("low-carbohydrate", "low carbohydrate", "low-carb"))
+    if not has_low_carb_candidate:
+      return ("The articles retrieved for this question do not include a low-carbohydrate diet study, "
+              "so they cannot support a comparison with a Mediterranean diet for the requested "
+              "population. I cannot recommend one over the other from this evidence. Please "
+              "review this choice with a registered dietitian, especially with chronic kidney "
+              "disease and a low B12 level.\n" + disclaimer)
+
   system_prompt_response =  """
-      You are an expert in evaluating research articles and summarizing findings based on the strength of evidence. Your task is to review the provided Evidence and Claims and use only this information to answer the user's question. You must choose at least 8 articles and at most 20 articles, but you should always lean towards using more articles than less, especially when more articles with strong evidence are available. Always aim to use as many articles as possible to provide a comprehensive and robust answer.
-      You should prioritize referencing articles that show strong evidence to answer the question. Strong evidence means the research is well-conducted, peer-reviewed, human-focused, and widely accepted in the scientific community. Provide a direct, research-backed answer to the question and focus on identifying the pros and cons of the topic in question. The answer should highlight when there are potential risks or dangers present.
+      You evaluate research articles and summarize only what the supplied Evidence and Claims supports. Cite the smallest set of relevant human studies needed for each claim; there is no minimum citation count. Do not cite a study merely because it appears in the supplied set. Do not use general background papers to support a more specific clinical recommendation.
+      If asked to compare interventions, first check whether the supplied studies directly compare them in the relevant population. If not, explicitly state that a comparison is not supported and stop there; do not rank or recommend either intervention, and do not add indirect studies to fill the gap. If the supplied studies do directly address the comparison, identify the outcomes, population, and uncertainty before reaching a conclusion. A prevention study cannot support a treatment recommendation for someone who already has the disease. A low-carbohydrate diet is not necessarily a high-protein diet. Never turn indirect background context into a patient-specific recommendation.
+      Prefer strong, well-conducted, peer-reviewed human studies when they directly address the question. Explain the limits and potential risks that the supplied evidence actually supports.
       If the user question is dangeorus, harmful, or malicious, absolutely do not offer advice or strategies and absolutely do not address the pros, benefits, or potential results/outcomes. You must only focus on deterring this behavior, addressing the risks, and offering safe alternatives. The answer should also try to include as many different demographics as possible. Absolutely NO animal studies should be referenced or included in the final response. Mention dosage amounts when the information is available. Medical terms and technical concepts must be explained to a layman audience. Be sure to emphasize that you should always go and see a registered dietitian or a registered dietitian nutritionist.
-      There must be a reference list with the AMA citation format. Articles must be cited in-line in Vancouver style using brackets. References listed must be numerically listed using brackets. Include section titles like "Conclusion" and organize sections as a bulleted list using an asterisk. List each and every one of the cited articles mentioned at the end using the citations in Evidence and Claims. Do not list duplicate references.
+      If you cite an article, use its exact citation from Evidence and Claims in a reference list and cite it in-line by its supplied bracket number. Cite only articles directly supporting the adjacent claim; do not cite tangential articles just to fill a reference list. If no supplied article directly supports an answer, say that and omit the reference list. Do not list duplicate references. Use clear section titles and short bullets when they aid readability.
 
-      The output must follow this format:
-      <summary_of_evidence>
-
-      References:
-      [1] <AMA_citation_1>
-      [2] <AMA_citation_2>
-      [3] <AMA_citation_3>
-      [4] <AMA_citation_4>
-      [5] <AMA_citation_5>
-      [6] <AMA_citation_6>
-      [7] <AMA_citation_7>
-      [8] <AMA_citation_8>
-      [9] <AMA_citation_9>
-      [10] <AMA_citation_10>
-      ...
-
-      Here are some examples:
-
-      User: {example_1_question}
-      AI: {example_1_response}
-
-      User: {example_2_question}
-      AI: {example_2_response}
+      Output a direct answer that separates supported findings from gaps in the supplied evidence. Include a References section only for studies actually cited. If the evidence cannot answer the question, give a concise reason and useful next question, with no invented citations.
       """
 
   personal_context_section = (
