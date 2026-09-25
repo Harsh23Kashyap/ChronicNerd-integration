@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DietNerd</title>
+    <script src="theme.js"></script>
     <link rel="stylesheet" type="text/css" href="index.css">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
 </head>
@@ -21,6 +22,7 @@
         <a href="index.html">Home</a>
         <a href="about.html">About</a>
         <a href="contact.html">Contact</a>
+        <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
         <div class="account-menu">
             <button type="button" id="account-button" aria-haspopup="true" aria-expanded="false"><span id="account-email">Account</span></button><span id="session-countdown" role="status" aria-live="off" title="Time until automatic sign-out" hidden></span>
             <div id="account-dropdown" class="account-dropdown" hidden>
@@ -60,6 +62,7 @@
         <p>Shela Wu @ New York University</p>
         <p>Zubair Yacub @ University of Illinois Urbana Champaign</p>
     </div> -->
+    <div id="onboarding-tour" class="onboarding-tour" role="dialog" aria-label="DietNerd quick tour" aria-modal="false" hidden><div class="tour-card"><span id="tour-count"></span><h2 id="tour-heading"></h2><p id="tour-body"></p><div class="tour-actions"><button type="button" id="tour-skip">Skip</button><button type="button" id="tour-next">Next</button></div></div></div>
     <div id="container">
         <main class="chat-shell">
             <aside class="chat-sidebar" aria-label="Conversations">

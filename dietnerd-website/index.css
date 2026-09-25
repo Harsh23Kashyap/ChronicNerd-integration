@@ -359,17 +359,17 @@ body.temporary-mode .starter-questions .example-question:hover,body.temporary-mo
 @media(max-width:800px){.sidebar-resizer{display:none}}
 @media(prefers-reduced-motion:reduce){.sidebar-resizer:after{transition:none}}
 
-body.temporary-mode .chat-panel{background:#fbf5e8;box-shadow:inset 4px 0 0 #bc8046}
-body.temporary-mode .chat-header{background:#f6e8ce;border-bottom-color:#dec9aa}
-body.temporary-mode .chat-thread{background:#fbf5e8}
+body.temporary-mode .chat-panel{background:#f8ead0;box-shadow:inset 4px 0 0 #bc8046}
+body.temporary-mode .chat-header{background:#f0dcb4;border-bottom-color:#dec9aa}
+body.temporary-mode .chat-thread{background:#f8ead0}
 body.temporary-mode .chat-header .status-dot{background:#a56734;box-shadow:0 0 0 5px rgba(165,103,52,.18)}
 body.temporary-mode .chat-header .status-dot:after{inset:-7px;border:2px solid #b9743e;animation:temporarySignal 1.7s ease-out infinite}
 body.temporary-mode .chat-header .header-actions>span{color:#7e6147}
 body.temporary-mode .welcome-message h2{color:#70492f}
 body.temporary-mode .welcome-message .assistant-avatar{background:#f3dfbd}
-body.temporary-mode .composer-wrap{background:#fbf5e8;border-top-color:#dec9aa}
+body.temporary-mode .composer-wrap{background:#f8ead0;border-top-color:#dec9aa}
 body.temporary-mode .composer{background:#fffaf0;border-color:#d0ae84;box-shadow:0 3px 16px rgba(105,69,31,.08)}
-body.temporary-mode .chat-panel>.hint:not(:empty){background:#fbf5e8;color:#81694f}
+body.temporary-mode .chat-panel>.hint:not(:empty){background:#f8ead0;color:#81694f}
 body.temporary-mode .starter-questions .example-question{background:#f9ecd5;border-color:#d2b28a;color:#70492f}
 body.temporary-mode .starter-questions .example-question:hover,body.temporary-mode .starter-questions .example-question:focus-visible{background:#f3dfbd;border-color:#b68857}
 body.temporary-mode .chat-message.user .message-content{background:#875b36}
@@ -377,3 +377,39 @@ body.temporary-mode .chat-message.assistant .message-content{background:#f5e9d8}
 @media(prefers-reduced-motion:reduce){body.temporary-mode .chat-header .status-dot:after{animation:none}}
 
 .answer-followups{margin-top:16px;padding-top:12px;border-top:1px solid #ccd9cd;display:flex;flex-wrap:wrap;gap:7px}.answer-followups p{flex-basis:100%;margin:0 0 2px;color:var(--muted);font:700 11px "DM Sans",sans-serif;letter-spacing:.02em}.answer-followups button{border:1px solid #bbd0c1;border-radius:9px;background:#fffef9;color:var(--forest);padding:8px 10px;text-align:left;font:600 11px/1.35 "DM Sans",sans-serif;cursor:pointer}.answer-followups button:hover,.answer-followups button:focus-visible{background:#e7f0e7;border-color:#7ca38a;outline:2px solid transparent}
+.theme-toggle{border:1px solid var(--line);border-radius:999px;background:var(--paper);color:var(--forest);padding:6px 10px;font:600 11px "DM Sans",sans-serif;cursor:pointer}.theme-toggle:focus-visible{outline:2px solid var(--lime)}
+html[data-theme=dark]{--forest:#a8d9b8;--forest-2:#8bc2a0;--lime:#c4df72;--cream:#151e1b;--paper:#202b26;--ink:#eaf3ec;--muted:#acbeb1;--line:#3d5146;--danger:#f0a394;color-scheme:dark}
+html[data-theme=dark],html[data-theme=dark] body{background:#151e1b;color:var(--ink)}
+html[data-theme=dark] .toolbar,html[data-theme=dark] .chat-header,html[data-theme=dark] .composer-wrap{background:#202b26}
+html[data-theme=dark] .chat-sidebar{background:#1d2923}
+html[data-theme=dark] .chat-shell,html[data-theme=dark] .chat-panel,html[data-theme=dark] .chat-thread{background:#202b26}
+html[data-theme=dark] .chat-sidebar select,html[data-theme=dark] .chat-sidebar .history-toggle,html[data-theme=dark] .composer,html[data-theme=dark] .message-content,html[data-theme=dark] .starter-questions .example-question,html[data-theme=dark] .answer-followups button,html[data-theme=dark] .account-dropdown{background:#29372e;color:var(--ink);border-color:#526556}
+html[data-theme=dark] .chat-message.user .message-content,html[data-theme=dark] .icon-button,html[data-theme=dark] .temporary-chat-button[aria-pressed=true]{background:#436e53;color:#fff}
+html[data-theme=dark] .chat-message.assistant .message-content{background:#29372e;color:var(--ink)}
+html[data-theme=dark] .composer #question,html[data-theme=dark] .composer #question::placeholder{color:var(--ink)}
+html[data-theme=dark] .conversation-row{color:var(--ink)}
+html[data-theme=dark] .conversation-row.active{background:#3a5d45;color:#fff}
+html[data-theme=dark] .sources-panel,html[data-theme=dark] .sources-panel-content,html[data-theme=dark] .source-card,html[data-theme=dark] .settings-dialog,html[data-theme=dark] .delete-dialog{background:#202b26;color:var(--ink)}
+html[data-theme=dark] body.temporary-mode .chat-panel,html[data-theme=dark] body.temporary-mode .chat-thread,html[data-theme=dark] body.temporary-mode .composer-wrap{background:#30281f}
+html[data-theme=dark] body.temporary-mode .chat-header{background:#493628}
+html[data-theme=dark] body.temporary-mode .chat-message.assistant .message-content{background:#443629}
+html[data-theme=dark] body.temporary-mode .welcome-message h2{color:#f0c899}
+html[data-theme=dark] body.temporary-mode .starter-questions .example-question{background:#433629;color:#f7d8ae}
+html[data-theme=dark] .app-loading{background:#151e1b!important;color:#eaf3ec!important}
+@media(max-width:800px){.toolbar .theme-toggle{margin-right:auto;white-space:nowrap;font-size:10px;padding:5px 8px}}
+html[data-theme=dark] .starter-questions .example-question,html[data-theme=dark] .answer-followups button,html[data-theme=dark] .chat-sidebar .history-toggle{background:#304236!important;color:#eaf3ec!important;border-color:#58705e!important}
+html[data-theme=dark] body.temporary-mode .starter-questions .example-question{background:#4b3b2c!important;color:#f7d8ae!important;border-color:#8c694a!important}
+html[data-theme=dark] body.temporary-mode .chat-panel>.hint:not(:empty){background:#30281f;color:#e9cba5}
+html[data-theme=dark] body.temporary-mode .composer{background:#433629;border-color:#8c694a}
+html[data-theme=dark] .temporary-chat-button{background:#29372e;color:#eaf3ec;border-color:#58705e}
+html[data-theme=dark] .composer #attach-button{background:#405748;color:#eaf3ec}
+html[data-theme=dark] .composer #submit{background:#c4df72;color:#173f35}
+
+.onboarding-tour[hidden]{display:none}.onboarding-tour{position:fixed;inset:0;z-index:40;pointer-events:none}.tour-card{position:absolute;pointer-events:auto;padding:16px;border:1px solid #bad1bf;border-radius:14px;background:#fffdf7;color:#173f35;box-shadow:0 14px 38px rgba(23,63,53,.2);animation:tourEnter .18s ease-out}.tour-card #tour-count{color:#63736c;font:700 10px "DM Sans",sans-serif;letter-spacing:.09em}.tour-card h2{margin:5px 0 6px;font:700 18px "Fraunces",serif}.tour-card p{margin:0 0 13px;font:400 12px/1.5 "DM Sans",sans-serif}.tour-actions{display:flex;justify-content:space-between}.tour-actions button{border:0;border-radius:8px;padding:8px 10px;font:700 11px "DM Sans",sans-serif;cursor:pointer}.tour-actions #tour-skip{background:transparent;color:#63736c}.tour-actions #tour-next{background:#173f35;color:#fff}.onboarding-tour:before{content:"";position:fixed;inset:0;background:rgba(10,25,18,.12);pointer-events:none}@keyframes tourEnter{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}html[data-theme=dark] .tour-card{background:#29372e;color:#eaf3ec;border-color:#58705e}html[data-theme=dark] .tour-actions #tour-next{background:#c4df72;color:#173f35}html[data-theme=dark] .tour-actions #tour-skip{color:#acbeb1}@media(prefers-reduced-motion:reduce){.tour-card{animation:none}}
+/* Keep interactive labels legible in both theme states. */
+html[data-theme=dark] .toolbar a{color:#a8d9b8}
+html[data-theme=dark] .composer-meta{color:#acbeb1}
+html[data-theme=dark] .starter-questions .example-question,html[data-theme=dark] .answer-followups button{background:#304236!important;color:#eaf3ec!important;border-color:#58705e!important}
+html[data-theme=dark] body.temporary-mode .starter-questions .example-question{background:#4b3b2c!important;color:#f7d8ae!important;border-color:#8c694a!important}
+html[data-theme=dark] .account-dropdown :is(a,button){color:#eaf3ec}
+html[data-theme=dark] .account-dropdown :is(a,button):hover{background:#304236}

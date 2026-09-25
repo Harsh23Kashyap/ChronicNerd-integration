@@ -7,3 +7,12 @@
 .signup-password-hint{color:var(--muted);font-size:13px;line-height:1.45;margin:3px 0 16px;text-align:left}
 
 .email-feedback{min-height:0;margin:7px 2px 0;text-align:left;color:var(--danger);font:500 12px/1.45 "DM Sans",sans-serif}.email-feedback:empty{display:none}
+.theme-toggle{position:fixed;top:16px;right:18px;border:1px solid var(--line);border-radius:999px;background:var(--paper);color:var(--forest);padding:7px 11px;font:600 11px "DM Sans",sans-serif;cursor:pointer;z-index:2}
+html[data-theme=dark]{--forest:#a8d9b8;--lime:#c4df72;--cream:#151e1b;--paper:#202b26;--ink:#eaf3ec;--muted:#acbeb1;--line:#3d5146;--danger:#f0a394;color-scheme:dark}
+html[data-theme=dark] body{background:#151e1b;color:var(--ink)}
+html[data-theme=dark] .login-container{background:#202b26;border-color:#3d5146}
+html[data-theme=dark] .form-group input{background:#28372e;color:var(--ink)}
+html[data-theme=dark] .auth-button{background:#426b4f;color:#fff}
+html[data-theme=dark] .login-container h2{color:var(--ink)}
+html[data-theme=dark] .login-container .logo{filter:brightness(0) saturate(100%) invert(86%) sepia(11%) saturate(654%) hue-rotate(87deg)}
+html[data-theme=dark] .toggle-password,html[data-theme=dark] .toggle-text a{color:#a8d9b8}

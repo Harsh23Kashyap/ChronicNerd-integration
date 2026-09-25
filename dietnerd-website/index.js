@@ -1401,3 +1401,47 @@ if (getConversationId()) enterConversationMode();
         localStorage.setItem('dietnerd_sidebar_width', apply(next));
     });
 })();
+
+
+// First-time orientation: three skippable pointers, never blocks the composer.
+(() => {
+    const key = 'dietnerd_tour_seen';
+    if (localStorage.getItem(key)) return;
+    const tour = document.getElementById('onboarding-tour');
+    const steps = [
+        {target:'#question', heading:'Ask a nutrition question', body:'Type here or choose an example question to start.'},
+        {target:'#temporary-chat', heading:'Choose your workspace', body:'Temporary chat is not saved to your account. Saved conversations stay in the history.'},
+        {target:'.chat-header', heading:'Check the sources', body:'When an answer cites research, open its sources and read the study before relying on it.'},
+    ];
+    let step = 0;
+    function close() { tour.hidden = true; localStorage.setItem(key,'1'); }
+    function show() {
+        const item = steps[step];
+        const anchor = document.querySelector(item.target);
+        if (!anchor) return close();
+        document.getElementById('tour-count').textContent = `${step+1} / ${steps.length}`;
+        document.getElementById('tour-heading').textContent = item.heading;
+        document.getElementById('tour-body').textContent = item.body;
+        document.getElementById('tour-next').textContent = step === steps.length - 1 ? 'Done' : 'Next';
+        tour.hidden = false;
+        const rect = anchor.getBoundingClientRect();
+        const card = tour.querySelector('.tour-card');
+        const w = Math.min(320, innerWidth - 24);
+        const x = Math.max(12, Math.min(innerWidth - w - 12, rect.left + rect.width/2 - w/2));
+        const y = rect.top > 245 ? rect.top - 175 : Math.min(innerHeight - 190, rect.bottom + 12);
+        card.style.width = `${w}px`;
+        card.style.left = `${x}px`;
+        card.style.top = `${Math.max(12,y)}px`;
+    }
+    document.getElementById('tour-skip').addEventListener('click',close);
+    document.getElementById('tour-next').addEventListener('click',()=>{if (++step>=steps.length) close(); else show();});
+    addEventListener('resize',()=>{if (!tour.hidden) show();});
+    // Wait until the authenticated app has finished opening.
+    const ready = new MutationObserver(()=>{
+        if (document.documentElement.classList.contains('auth-pending')) return;
+        ready.disconnect();
+        show();
+    });
+    if (document.documentElement.classList.contains('auth-pending')) ready.observe(document.documentElement,{attributes:true,attributeFilter:['class']});
+    else show();
+})();
