@@ -1177,11 +1177,13 @@ document.getElementById('temporary-chat').addEventListener('click', () => {
     document.getElementById('attach-button').title = 'Attachments are unavailable in temporary chat';
     document.getElementById('temporary-chat').setAttribute('aria-pressed', 'true');
     document.getElementById('chat-title').textContent = 'Temporary chat';
+    document.querySelector('.welcome-message h2').textContent = 'Temporary workspace';
+    document.querySelector('.welcome-message p').textContent = 'Ask a question here. This chat is not saved to your account.';
     document.getElementById('delete-conversation').hidden = true;
     document.getElementById('attach-button').disabled = true;
     document.getElementById('existing-attachments').hidden = true;
     document.getElementById('attachment-label').textContent = 'Attachments unavailable in temporary chat';
-    document.querySelector('.hint').textContent = 'Not in chat history. This tab only; closing or leaving clears it.';
+    document.querySelector('.hint').textContent = 'Not saved to your account. This tab clears when you leave or reload.';
 });
 
 document.getElementById('new-conversation').addEventListener('click', () => {
