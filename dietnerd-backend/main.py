@@ -317,6 +317,38 @@ async def openai_network_health():
                         headers={"Cache-Control": "no-store"})
 
 
+def _openai_sdk_probe():
+    """Temporary diagnostic; never use the real key or return exception messages."""
+    from openai import OpenAI
+    try:
+        # Same default sync client/transport as byok.ScopedOpenAI, but the key is
+        # deliberately invalid. A provider 401 proves that the SDK connected.
+        client = OpenAI(api_key="sk-diagnostic-invalid")
+        client.with_options(max_retries=0, timeout=8.0).models.list()
+    except Exception as exc:
+        status = getattr(exc, "status_code", None)
+        if type(exc).__name__ == "AuthenticationError" and status == 401:
+            return {"status": "reachable", "http_status": 401}
+        causes, seen, cause = [], set(), exc.__cause__
+        while cause is not None and len(causes) < 4 and id(cause) not in seen:
+            seen.add(id(cause))
+            errno = getattr(cause, "errno", None)
+            causes.append({"type": type(cause).__name__,
+                           "errno": errno if isinstance(errno, int) else None})
+            cause = cause.__cause__
+        return {"status": "failed", "error_type": type(exc).__name__,
+                "http_status": status if isinstance(status, int) else None,
+                "causes": causes}
+    return {"status": "reachable", "http_status": 200}
+
+
+@app.get("/health/openai-sdk")
+async def openai_sdk_health():
+    result = await asyncio.to_thread(_openai_sdk_probe)
+    return JSONResponse(result, status_code=200 if result["status"] == "reachable" else 503,
+                        headers={"Cache-Control": "no-store"})
+
+
 @app.post("/register")
 async def register(auth_body: AuthModel, response: Response):
     email = auth.normalize_email(auth_body.email)
