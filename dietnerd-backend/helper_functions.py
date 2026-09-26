@@ -319,6 +319,26 @@ def collect_articles(query_list):
   return articles_collected
 #@title relevance_classifier
 #@title relevance_classifier
+def is_animal_only_article(article):
+  """Reject explicitly animal-only PubMed records before model classification.
+
+  Ambiguous preclinical/in-vitro papers require the relevance model's own
+  judgment; only explicit animal metadata or unambiguous animal-subject titles
+  trigger this deterministic guard. Human+animal mixed studies are not removed.
+  """
+  medline = article.get('MedlineCitation', {}) if isinstance(article, dict) else {}
+  paper = medline.get('Article', {})
+  mesh = medline.get('MeshHeadingList', []) or []
+  heading_names = {str(item.get('DescriptorName', '') if isinstance(item, dict) else getattr(item, 'DescriptorName', '')).casefold() for item in mesh}
+  if 'animals' in heading_names and 'humans' not in heading_names:
+    return True
+  title = str(paper.get('ArticleTitle') or article.get('title') or '')
+  abstract = paper.get('Abstract', {}).get('AbstractText', []) or []
+  text = title + ' ' + ' '.join(str(part) for part in abstract)
+  if re.search(r'\b(human|humans|people|patients|participants|volunteers|clinical trial)\b', text, re.I):
+    return False
+  return bool(re.search(r'\b(in rats?|in mice|in hamsters?|in rabbits?|in zebrafish|in monkeys?|animal model|rodent model|mouse model)\b', title, re.I))
+
 def relevance_classifier(article, user_query):
   """
   Classifies an article as relevant or irrelevant based on its abstract.
@@ -335,8 +355,10 @@ def relevance_classifier(article, user_query):
   - article_is_relevant (str): Whether the article is relevant or not. Returns only "yes" or "no".
   - article (dict): The input article dictionary.
   """
-  abstract = article["MedlineCitation"]["Article"]["Abstract"]["AbstractText"]
   pmid = str(article["MedlineCitation"]["PMID"])
+  if is_animal_only_article(article):
+      return pmid, False, article
+  abstract = article["MedlineCitation"]["Article"]["Abstract"]["AbstractText"]
 
   ### Clean-Up Abstract ###
   reconstructed_abstract = ""
