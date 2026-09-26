@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DietNerd - Login</title>
+    <script src="theme.js"></script>
+    <link rel="stylesheet" type="text/css" href="login.css">
+    <link href='https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap' rel="stylesheet">
+</head>
+<body>
+    <button type="button" class="theme-toggle" data-theme-toggle aria-label="Switch to dark mode" title="Switch to dark mode"><span class="theme-sky" aria-hidden="true"><span class="theme-orb"></span><span class="theme-cloud"></span></span></button>
+    <div class="login-container">
+        <a href="login.html"><img src="assets/dietnerd_dialogue.svg" alt="DietNerd Logo" class="logo"></a>
+
+        <!-- Sign in -->
+        <form id="login-form" class="auth-form" novalidate>
+            <h2>Sign in to continue</h2>
+            <div class="form-group">
+                <label for="login-email">Username</label>
+                <input type="text" id="login-email" name="username" autocomplete="username" placeholder="Email or username" required>
+            </div>
+            <div class="form-group">
+                <label for="login-password">Password</label>
+                <div class="password-field">
+                    <input type="password" id="login-password" autocomplete="current-password" placeholder="Enter your password" required>
+                    <button type="button" class="toggle-password" data-target="login-password" aria-label="Show password">Show</button>
+                </div>
+            </div>
+            <p class="recovery-warning">There is no password recovery or reset for this account. Save your password.</p>
+            <button type="submit" class="auth-button" id="login-button">Sign in</button>
+            <div id="login-error" class="error-message" role="alert"></div>
+            <div id="login-info" class="success-message" role="status"></div>
+            <p class="toggle-text">Don't have an account? <a href="#" data-show="register-form">Create one</a></p>
+        </form>
+
+        <!-- Register -->
+        <form id="register-form" class="auth-form" hidden novalidate>
+            <h2>Create your account</h2>
+            <div class="form-group">
+                <label for="register-email">Username</label>
+                <input type="text" id="register-email" name="username" autocomplete="username" placeholder="Email or username" aria-describedby="register-email-feedback" required>
+                <p id="register-email-feedback" class="email-feedback" role="status" aria-live="polite"></p>
+            </div>
+            <div class="form-group">
+                <label for="register-password">Password</label>
+                <div class="password-field">
+                    <input type="password" id="register-password" autocomplete="new-password" placeholder="At least 8 characters" minlength="8" required>
+                    <button type="button" class="toggle-password" data-target="register-password" aria-label="Show password">Show</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="register-confirm">Confirm password</label>
+                <input type="password" id="register-confirm" autocomplete="new-password" placeholder="Type it again" required>
+            </div>
+            <p class="signup-password-hint">Save this password in your password manager before creating the account.</p>
+            <button type="submit" class="auth-button" id="register-button">Create account</button>
+            <div id="register-error" class="error-message" role="alert"></div>
+            <p class="toggle-text">Already have an account? <a href="#" data-show="login-form">Sign in</a></p>
+        </form>
+
+    </div>
+    <script src="env.js"></script>
+    <script src="api.js"></script>
+    <script src="login.js"></script>
+</body>
+</html>

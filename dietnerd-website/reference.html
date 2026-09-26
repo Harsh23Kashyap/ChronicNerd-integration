@@ -1,45 +1,7 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reference</title>
-    <link rel="stylesheet" type="text/css" href="reference.css">
-    <style>
-        .toolbar {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-        }
-        .toolbar a {
-            margin-left: 15px;
-            text-decoration: none;
-            color: #333;
-            font-weight: bold;
-        }
-    </style>
-</head>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Article Analysis | DietNerd</title><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet"><link rel="stylesheet" href="reference.css"><script src="theme.js"></script></head>
 <body>
-    <div class="toolbar">
-        <a href="index.html">Home</a>
-        <a href="about.html">About</a>
-        <a href="contact.html">Contact</a>
-    </div>
-    <!-- <div id="ownership">
-        <p>Professor Dennis Shasha @ New York University</p>
-        <p>Shela Wu @ New York University</p>
-        <p>Zubair Yacub @ University of Illinois Urbana Champaign</p>
-    </div> -->
-    <div id="container">
-        <img src="assets/dietnerd_logo.png" alt="DietNerd Logo" class="logo">
-        <div class="header">
-            <h1>Article Analysis</h1>
-            <div class="button-container">
-                <button id="redirect-button">Read Article</button>
-            </div>
-        </div>
-        <div id="reference-content"></div>
-    </div>
-    <script src="reference.js"></script>
-</body>
-</html>
+<header class="topbar"><a class="brand" href="index.html"><img src="assets/dietnerd_dialogue.svg" alt="DietNerd"></a><nav aria-label="Site"><a href="index.html">Home</a><a href="about.html">About</a><a href="contact.html">Contact</a><button type="button" data-theme-toggle class="theme-toggle" aria-label="Switch to dark mode" title="Switch to dark mode"><span class="theme-sky" aria-hidden="true"><span class="theme-orb"></span><span class="theme-cloud"></span></span></button></nav></header>
+<main id="container"><a class="back" href="index.html">← Back to research</a><div class="eyebrow">DIETNERD / EVIDENCE LIBRARY</div><div class="heading"><div><h1>Article Analysis</h1><p>One paper at a time. This analysis is a research aid, not independent verification of the article's claims.</p></div><a id="read-article" class="read-article" target="_blank" rel="noopener noreferrer" hidden>Read Article ↗</a></div><div id="reference-content" role="status" aria-live="polite"><p>Loading the article analysis...</p></div></main>
+<script src="env.js"></script><script src="api.js"></script><script src="reference.js"></script>
+</body></html>

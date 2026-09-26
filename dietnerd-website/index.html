@@ -4,54 +4,218 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DietNerd</title>
+    <script src="theme.js"></script>
     <link rel="stylesheet" type="text/css" href="index.css">
-    <link href='https://fonts.googleapis.com/css?family=Open Sans' rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <script>
+        // Hide the app until the server confirms the session (see auth check below).
+        document.documentElement.classList.add('auth-pending');
+    </script>
+    <div class="app-loading visible" role="status" aria-live="polite" style="position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#fffdf7;color:#173f35">
+        <div class="app-loading-emblem" aria-hidden="true"><span class="app-loading-orbit"></span><img src="assets/dietnerd_dialogue.svg" alt=""></div>
+        <strong>Opening DietNerd</strong>
+        <span class="app-loading-track" aria-hidden="true"></span>
+    </div>
     <div class="toolbar">
         <a href="index.html">Home</a>
         <a href="about.html">About</a>
         <a href="contact.html">Contact</a>
+        <button type="button" class="theme-toggle" data-theme-toggle aria-label="Switch to dark mode" title="Switch to dark mode"><span class="theme-sky" aria-hidden="true"><span class="theme-orb"></span><span class="theme-cloud"></span></span></button>
+        <div class="account-menu">
+            <button type="button" id="account-button" aria-haspopup="true" aria-expanded="false"><span id="account-email">Account</span></button><span id="session-countdown" role="status" aria-live="off" title="Time until automatic sign-out" hidden></span>
+            <div id="account-dropdown" class="account-dropdown" hidden>
+                <button type="button" id="diet-profile-link">Diet profile</button>
+                <button type="button" id="change-password-link">Change password</button>
+                <button type="button" id="logout-link">Sign out</button>
+            </div>
+        </div>
     </div>
+    <dialog id="signout-dialog" class="settings-dialog signout-dialog" aria-labelledby="signout-title" aria-describedby="signout-description">
+        <h2 id="signout-title">Sign out?</h2>
+        <p id="signout-description">You will need your password to sign in again.</p>
+        <p id="signout-error" class="dialog-error" role="alert"></p>
+        <div class="dialog-actions">
+            <button type="button" id="signout-cancel" class="secondary-button">Stay signed in</button>
+            <button type="button" id="signout-confirm" class="primary-button">Sign out</button>
+        </div>
+    </dialog>
+    <dialog id="change-password-dialog" class="settings-dialog">
+        <form id="change-password-form" method="dialog" novalidate>
+            <h2>Change password</h2>
+            <label for="current-password">Current password</label>
+            <input type="password" id="current-password" autocomplete="current-password" required>
+            <label for="new-password">New password</label>
+            <input type="password" id="new-password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" required>
+            <label for="confirm-new-password">Confirm new password</label>
+            <input type="password" id="confirm-new-password" autocomplete="new-password" required>
+            <p id="change-password-error" class="dialog-error" role="alert"></p>
+            <p id="change-password-success" class="dialog-success" role="status"></p>
+            <div class="dialog-actions">
+                <button type="button" id="change-password-cancel" class="secondary-button">Close</button>
+                <button type="submit" id="change-password-save" class="primary-button">Save password</button>
+            </div>
+        </form>
+    </dialog>
     <!-- <div id="ownership">
         <p>Professor Dennis Shasha @ New York University</p>
         <p>Shela Wu @ New York University</p>
         <p>Zubair Yacub @ University of Illinois Urbana Champaign</p>
     </div> -->
+    <div id="onboarding-tour" class="onboarding-tour" role="dialog" aria-label="DietNerd quick tour" aria-modal="false" hidden><div class="tour-card"><span id="tour-count"></span><h2 id="tour-heading"></h2><p id="tour-body"></p><div class="tour-actions"><button type="button" id="tour-skip">Skip</button><button type="button" id="tour-next">Next</button></div></div></div>
     <div id="container">
-        <a href="index.html"><img src="assets/dietnerd_logo.png" alt="DietNerd Logo" class="logo"></a>
-        
-        <h2>We answer your diet and nutrition questions based on the strongest scientific evidence</h2>
-        <p class="disclaimer"><br><i><strong>Disclaimer:</strong> DietNerd is an exploratory tool designed to enrich your conversations with a registered dietitian or registered dietitian nutritionist, who can then review your profile before providing recommendations. Please be aware that the insights provided by DietNerd may not fully take into consideration all potential medication interactions or pre-existing conditions.<br><a href="https://www.eatright.org/find-a-nutrition-expert" target="_blank">Find a local expert near you.</a></i></p>
-        <div class="input-container">
-            <label for="question" class="visually-hidden">Enter your diet-based question</label>
-            <input type="text" id="question" placeholder="Enter your question here...">
-            <button id="submit">Submit</button>
-        </div>
-        <div class id="example-questions">
-            <h3>Example Questions:</h3>
-            <div class="example-question">What diet is recommended for PCOS?</div>
-            <div class="example-question">What are the pros and cons of vitamin b12?</div>
-            <div class="example-question">Does adherence to the Mediterranean dietary pattern reduce asthma symptoms in children?</div>
-        </div>
-        <p class="hint"></p>
-        <div id="results" class="hidden">
-            <div id="output">
-                <textarea readonly placeholder="Answer will load here..."></textarea>
-            </div>
-            <div id="references">
-                <label for="references" class="visually-hidden">References will appear here</label>
-                <textarea id="references" readonly placeholder="References will appear here..."></textarea>
-            </div>
-        </div>
-        <div class="button-container">
-            <button id="generate-pdf-button" class="hidden">Download PDF</button>
-        </div>
-        <div class="similar-questions" id="similarQuestions"></div> <!-- Container for similar questions buttons -->
+        <main class="chat-shell">
+            <aside class="chat-sidebar" aria-label="Conversations">
+                <div class="sidebar-heading"><span>Conversations</span><button type="button" id="new-conversation" class="icon-button" aria-label="New conversation" title="New conversation">+</button><button type="button" id="temporary-chat" class="temporary-chat-button" aria-pressed="false" title="Temporary chat, not saved">Temporary</button></div>
+                <label for="conversation-select" class="visually-hidden">Choose conversation</label>
+                <select id="conversation-select" class="visually-hidden" aria-label="Choose conversation"><option value="">New conversation</option></select>
+                <button type="button" id="history-toggle" class="history-toggle" aria-expanded="false" aria-controls="conversation-list">Chat history ▾</button>
+                <div class="history-results">
+                    <label for="history-search" class="visually-hidden">Search conversation titles</label>
+                    <input type="search" id="history-search" class="history-search" placeholder="Search conversations" autocomplete="off" aria-controls="conversation-list">
+                    <nav id="conversation-list" class="conversation-list" aria-label="Chat history"></nav>
+                    <p id="history-search-empty" class="history-search-empty" role="status" hidden>No matching conversations</p>
+                </div>
+                <button type="button" id="delete-conversation" class="delete-link">Delete current conversation</button>
+                <div class="sidebar-options" aria-label="Research options">
+                    <span class="sidebar-options-heading">Research options</span>
+                    <label><span>Show claim sources</span><input type="checkbox" id="sidebar-ledger" aria-label="Show claim sources under answers"></label>
+                    <a class="sidebar-addons-link" href="addons.html">See all research tools</a>
+                </div>
+                <div class="sidebar-note"><strong>DietNerd</strong><span>Answers grounded in published research. Check important health information.</span></div>
+            </aside>
+            <div id="sidebar-resizer" class="sidebar-resizer" role="separator" aria-label="Resize conversation sidebar" aria-orientation="vertical" tabindex="0" aria-valuemin="220" aria-valuemax="480" aria-valuenow="250"></div>
+            <section class="chat-panel" aria-labelledby="chat-title">
+                <header class="chat-header"><div><span class="status-dot"></span><strong id="chat-title">DietNerd assistant</strong></div><div class="header-actions"><label class="header-profile-toggle"><input type="checkbox" id="use-profile" checked><span>Use my profile</span></label><label class="header-answer-mode" for="answer-mode"><span>Research</span><select id="answer-mode" aria-label="Answer mode"><option value="light">Light</option><option value="heavy">Heavy</option></select></label><button id="generate-pdf-button" class="hidden header-button">Download answer</button></div><span id="profile-use-note" class="profile-use-note" role="status">Applies to this conversation only.</span></header>
+                <div id="chat-thread" class="chat-thread" role="log" aria-live="off" aria-relevant="additions">
+                    <div class="welcome-message">
+                        <span class="assistant-avatar" aria-label="DietNerd"><img src="assets/dietnerd_mark.svg" alt=""></span>
+                        <div><h2>What would you like to understand?</h2><p>Ask a diet or nutrition question. I will trace the evidence and explain what the research says.</p>
+                        <div id="example-questions" class="starter-questions" aria-label="Example questions"><button type="button" class="example-question">How much protein do I need daily?</button><button type="button" class="example-question">Is coffee good for heart health?</button><button type="button" class="example-question">What helps with iron deficiency?</button></div></div>
+                    </div>
+                </div>
+                <nav id="conversation-chapters" class="conversation-chapters" aria-label="Questions in this conversation" hidden><span>In this conversation</span><div id="chapter-links"></div></nav>
+                <div class="thread-jump" hidden><button type="button" id="previous-message" aria-label="Scroll to previous message">↑ Previous message</button><button type="button" id="latest-message" aria-label="Scroll to latest message">↓ Latest</button></div>
+                <p class="hint" role="status" aria-live="polite"></p>
+                <div class="similar-questions" id="similarQuestions"></div>
+                <div class="composer-wrap">
+                    <div id="paper-chip-row" class="paper-chip-row" hidden><span id="paper-chip-text"></span><a id="paper-chip-link" target="_blank" rel="noopener noreferrer" hidden>Open paper</a><button type="button" id="paper-clear" aria-label="Remove paper">×</button></div>
+                    <div id="existing-attachments" class="existing-attachments"></div>
+                    <div id="followup-lens" class="followup-lens" hidden><strong>Continuing this conversation</strong><span id="followup-context"></span><button type="button" id="view-context" aria-label="View earlier questions">Review questions</button></div>
+                    <div class="composer">
+                        <input type="file" id="attachment-file" accept=".pdf,.txt,.csv" class="visually-hidden">
+                        <button type="button" id="attach-button" title="Attach a file" onclick="document.getElementById('attachment-file').click()" aria-label="Attach a file">＋</button>
+                        <label for="question" class="visually-hidden">Message DietNerd</label>
+                        <textarea id="question" rows="1" placeholder="Message DietNerd..."></textarea>
+                        <button type="button" id="voice-input" aria-label="Dictate message" title="Dictate message" hidden><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4m-4 0h8"/></svg></button>
+                        <button id="submit" aria-label="Send message">↑</button>
+                    </div>
+                    <div class="composer-meta"><div class="composer-tools"><span id="attachment-label">No file attached</span><button type="button" id="paper-button" class="paper-button">Ask about a paper</button></div><span>DietNerd can make mistakes. Check important health information.</span></div>
+                </div>
+            </section>
+            <aside id="sources-panel" class="sources-panel" aria-labelledby="sources-title" aria-hidden="true">
+                <header class="sources-panel-header"><div><span class="sources-kicker">Evidence library</span><h2 id="sources-title">Sources</h2></div><button type="button" id="close-sources" class="close-sources" aria-label="Close sources">×</button></header>
+                <div id="sources-panel-content" class="sources-panel-content"><p class="sources-empty">Sources for an answer will appear here.</p></div>
+            </aside>
+        </main>
     </div>
+    <dialog id="paper-dialog" class="paper-dialog" aria-labelledby="paper-dialog-title">
+        <h2 id="paper-dialog-title">Ask about a paper</h2>
+        <p>Paste a PubMed link or PMID, or select a PDF. Questions use this paper until you remove it. The PDF stays selected in this browser session and is not saved as an account document.</p>
+        <input type="text" id="paper-input" placeholder="https://pubmed.ncbi.nlm.nih.gov/12345678/ or 12345678" autocomplete="off">
+        <label for="paper-pdf">Or choose a PDF paper (up to 5 MB)</label><input type="file" id="paper-pdf" accept=".pdf,application/pdf">
+        <p id="paper-dialog-error" role="alert" hidden></p>
+        <div class="paper-dialog-actions"><button type="button" id="paper-cancel">Cancel</button><button type="button" id="paper-load" class="primary-button">Use this paper</button></div>
+    </dialog>
+    <dialog id="profile-dialog" class="settings-dialog">
+        <form id="profile-form" method="dialog" novalidate>
+            <h2>Diet profile</h2>
+            <p class="profile-note">Optional. Saved to your account and used to personalize answers. It is not medical advice, and you can clear it at any time.</p>
+            <label for="profile-age-trigger">Age range</label>
+            <div class="profile-age-picker">
+                <select id="profile-age" hidden tabindex="-1" aria-hidden="true">
+                    <option value="">Prefer not to say</option>
+                    <option>18-24</option><option>25-34</option><option>35-44</option><option>45-54</option><option>55-64</option><option>65+</option>
+                </select>
+                <button type="button" id="profile-age-trigger" class="profile-age-trigger" role="combobox" aria-label="Age range" aria-haspopup="listbox" aria-controls="profile-age-options" aria-expanded="false" aria-activedescendant="profile-age-option-0">Prefer not to say</button>
+                <div id="profile-age-options" class="profile-age-options" role="listbox" aria-label="Age range" hidden>
+                    <div id="profile-age-option-0" role="option" aria-selected="true" data-value="" tabindex="-1">Prefer not to say</div>
+                    <div id="profile-age-option-1" role="option" aria-selected="false" data-value="18-24" tabindex="-1">18-24</div>
+                    <div id="profile-age-option-2" role="option" aria-selected="false" data-value="25-34" tabindex="-1">25-34</div>
+                    <div id="profile-age-option-3" role="option" aria-selected="false" data-value="35-44" tabindex="-1">35-44</div>
+                    <div id="profile-age-option-4" role="option" aria-selected="false" data-value="45-54" tabindex="-1">45-54</div>
+                    <div id="profile-age-option-5" role="option" aria-selected="false" data-value="55-64" tabindex="-1">55-64</div>
+                    <div id="profile-age-option-6" role="option" aria-selected="false" data-value="65+" tabindex="-1">65+</div>
+                </div>
+            </div>
+            <label for="profile-goals">Goals</label>
+            <input type="text" id="profile-goals" maxlength="300" placeholder="e.g. lose weight, build muscle, more energy">
+            <label for="profile-conditions">Conditions</label>
+            <input type="text" id="profile-conditions" maxlength="300" placeholder="e.g. PCOS, prediabetes, none">
+            <label for="profile-additional-notes">Additional notes</label>
+            <textarea id="profile-additional-notes" maxlength="1000" rows="3" placeholder="e.g. height, weight, activity, preferences or anything you want considered"></textarea>
+            <div class="profile-files">
+                <label for="profile-file-input">Profile files</label>
+                <p class="profile-note">PDF, TXT or CSV, up to 5 MB each. Saved privately to your account. Used only when “Use my profile” is on in a saved conversation; never in Temporary.</p>
+                <input id="profile-file-input" type="file" accept=".pdf,.txt,.csv,application/pdf,text/plain,text/csv">
+                <button type="button" id="profile-file-upload" class="secondary-button">Add profile file</button>
+                <ul id="profile-file-list" aria-label="Saved profile files"></ul>
+                <p id="profile-file-status" class="profile-note" role="status"></p>
+            </div>
+            <p id="profile-error" class="dialog-error" role="alert"></p>
+            <p id="profile-success" class="dialog-success" role="status"></p>
+            <div class="dialog-actions">
+                <button type="button" id="profile-clear" class="secondary-button">Clear profile</button>
+                <button type="button" id="profile-cancel" class="secondary-button">Close</button>
+                <button type="submit" id="profile-save" class="primary-button">Save profile</button>
+            </div>
+        </form>
+    </dialog>
+    <dialog id="delete-conversation-dialog" class="delete-dialog" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-description">
+        <div class="delete-dialog-icon" aria-hidden="true"><span class="delete-dialog-lid"></span><span class="delete-dialog-bin">×</span></div>
+        <h2 id="delete-dialog-title">Delete this conversation?</h2>
+        <p id="delete-dialog-description">This conversation and its chat history will be removed. This can't be undone.</p>
+        <p id="delete-dialog-error" role="alert" hidden></p>
+        <div class="delete-dialog-actions"><button type="button" id="delete-dialog-cancel">Keep conversation</button><button type="button" id="delete-dialog-confirm">Delete conversation</button></div>
+    </dialog>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="env.js"></script>
+    <script src="api.js"></script>
+    <script>
+        (function () {
+            var overlay = document.querySelector('.app-loading');
+            var guard = window.setTimeout(function () {
+                if (!document.documentElement.classList.contains('auth-pending')) return;
+                overlay.querySelector('strong').textContent = 'DietNerd is taking longer than expected';
+                var retry = document.createElement('button');
+                retry.type = 'button'; retry.textContent = 'Try again';
+                retry.onclick = function () { window.location.reload(); };
+                overlay.appendChild(retry);
+            }, 12000);
+            window.DietNerdAPI.apiFetch('/me', {allowUnauthorized:true}).then(function (response) {
+                if (response.status === 401) { window.location.href = 'login.html'; return; }
+                if (!response.ok) throw new Error('Session check failed');
+                return response.json().then(function (user) {
+                    if (!user || !user.email) throw new Error('Invalid session response');
+                    clearTimeout(guard);
+                    document.documentElement.classList.remove('auth-pending');
+                    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                });
+            }).catch(function () {
+                clearTimeout(guard);
+                if (!overlay.parentNode) return;
+                overlay.querySelector('strong').textContent = 'Could not open DietNerd';
+                var retry = document.createElement('button');
+                retry.type = 'button'; retry.textContent = 'Try again';
+                retry.onclick = function () { window.location.reload(); };
+                overlay.appendChild(retry);
+            });
+        })();
+    </script>
+    <script src="addons.js"></script>
     <script src="index.js"></script>
+    <script src="account.js"></script>
 </body>
 </html>
