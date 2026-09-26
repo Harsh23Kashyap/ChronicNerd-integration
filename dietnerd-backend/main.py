@@ -1451,14 +1451,39 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
     weight_match = re.search(r"\b(?:body )?weight\s*(?:is|:|=)?\s*(\d{2,3}(?:\.\d+)?)\s*kg\b", profile_prompt, re.I) if profile_prompt else None
     if weight_match and re.search(r"\bprotein\b", pipeline_query, re.I) and re.search(r"(?:calculat|range|body weight|my weight|daily)", pipeline_query, re.I):
         weight = weight_match.group(1)
-        if not re.search(rf"\b{re.escape(weight)}\s*(?:kg|kilograms?)\b", final_output, re.I):
-            logging.warning("Personalized answer omitted the supplied weight; retrying synthesis once")
+        mentions_weight = bool(re.search(rf"\b{re.escape(weight)}\s*(?:kg|kilograms?)\b", final_output, re.I))
+        # If the answer gives a supported g/kg range, the requested g/day
+        # conversion is only a unit calculation, not a new clinical target.
+        per_kg_range = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:to|[-–])\s*(\d+(?:\.\d+)?)\s*(?:g|grams?)\s*(?:of protein)?\s*(?:per|/)\s*(?:kg|kilogram)", final_output, re.I)
+        has_daily_result = bool(re.search(r"\b\d+(?:\.\d+)?\s*(?:to|[-–])\s*\d+(?:\.\d+)?\s*(?:g|grams?)\s*(?:/|per )?\s*(?:day|daily)\b", final_output, re.I))
+        if not mentions_weight or (per_kg_range and not has_daily_result):
+            logging.warning("Personalized answer omitted weight or requested arithmetic; retrying synthesis once")
             final_output = generate_final_response(
                 all_relevant_articles,
                 pipeline_query + f"\nFor this question, the self-reported body weight is {weight} kg. If the supplied human research supports a per-kg range, calculate the corresponding gram range, show multiplication and name study limits. If it does not, say no personal range is established; do not invent one.",
                 user_attachment_context, original_articles=relevant_articles,
                 recent_history=session_memory[-8:], profile_context=profile_prompt or None,
                 answer_mode=answer_mode)
+            # A second model response can still omit multiplication. Only use
+            # numbers it itself states, present the arithmetic as a conditional
+            # translation, and explicitly keep clinical uncertainty attached.
+            range_after_retry = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:to|[-–])\s*(\d+(?:\.\d+)?)\s*(?:g|grams?)\s*(?:of protein)?\s*(?:per|/)\s*(?:kg|kilogram)", final_output, re.I)
+            daily_after_retry = re.search(r"\b\d+(?:\.\d+)?\s*(?:to|[-–])\s*\d+(?:\.\d+)?\s*(?:g|grams?)\s*(?:/|per )?\s*(?:day|daily)\b", final_output, re.I)
+            if range_after_retry and not daily_after_retry:
+                low, high = map(float, range_after_retry.groups())
+                mass = float(weight)
+                if 0 < low <= high <= 5 and 25 <= mass <= 400:
+                    from decimal import Decimal
+                    grams_low = Decimal(weight) * Decimal(range_after_retry.group(1))
+                    grams_high = Decimal(weight) * Decimal(range_after_retry.group(2))
+                    arithmetic = (f"\nFor the self-reported {weight} kg body weight, the stated range converts to "
+                                  f"{weight} × {range_after_retry.group(1)} = {grams_low.normalize()} g/day "
+                                  f"through {weight} × {range_after_retry.group(2)} = {grams_high.normalize()} g/day. "
+                                  "This is only arithmetic using the range above, not an individualized recommendation; "
+                                  "the evidence limits and dietitian questions still apply.\n")
+                    heading = re.search(r"(?im)^[ \t]*What we don.t know[ \t]*:?[ \t]*$", final_output)
+                    if heading:
+                        final_output = final_output[:heading.start()].rstrip() + arithmetic + "\n" + final_output[heading.start():]
     if attachment_partial_answer:
         final_output = attachment_partial_answer + "\n\n" + final_output
     end_output = time.time()
