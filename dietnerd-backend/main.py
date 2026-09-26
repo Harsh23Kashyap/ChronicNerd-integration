@@ -639,6 +639,7 @@ def append_session_memory(email: str, conversation_id: str, entry: dict):
 
 @app.get("/articles/{pmid}")
 async def read_article_analysis(pmid: str, email: str = Depends(current_user)):
+    from article_analysis import useful_summary, pubmed_abstract_fallback
     if not pmid.isdigit() or len(pmid) > 12:
         raise HTTPException(status_code=404, detail="Article analysis not found.")
     connection = _get_db_connection()
@@ -648,17 +649,32 @@ async def read_article_analysis(pmid: str, email: str = Depends(current_user)):
         row = cursor.fetchone()
     finally:
         connection.close()
-    if not row:
-        raise HTTPException(status_code=404, detail="Article analysis not found.")
     try:
-        article = json.loads(row[0])
+        article = json.loads(row[0]) if row else {}
     except (TypeError, ValueError):
-        raise HTTPException(status_code=404, detail="Article analysis not found.")
+        article = {}
     if not isinstance(article, dict):
-        raise HTTPException(status_code=404, detail="Article analysis not found.")
+        article = {}
+    # A legacy row can contain a model refusal rather than research findings.
+    # Fetch the exact PMID's current PubMed abstract instead of displaying the
+    # refusal or pretending it is an analysis. Never overwrite the cached row.
+    # Quarantine a confirmed contaminated saved row without deleting forensic data.
+    # Serve only the exact PMID's original PubMed abstract, never cached synthesis.
+    if pmid == '41723912' or not useful_summary(article.get('summary')):
+        try:
+            fallback = await run_in_threadpool(pubmed_abstract_fallback, pmid,
+                         os.getenv('ENTREZ_EMAIL'), os.getenv('NCBI_API_KEY'))
+        except Exception:
+            logging.exception('PubMed abstract unavailable for PMID %s', pmid)
+            fallback = None
+        if fallback:
+            return {"pmid": pmid, "title": fallback['title'],
+                    "citation": article.get('citation') or '', **fallback}
+        raise HTTPException(status_code=404, detail="No usable article analysis or PubMed abstract found.")
     return {"pmid": pmid, "title": article.get("title") or "Article analysis",
             "citation": article.get("citation") or "", "summary": article.get("summary") or "",
-            "url": article.get("url") if str(article.get("url", "")).startswith("https://") else ""}
+            "url": article.get("url") if str(article.get("url", "")).startswith("https://") else "",
+            "analysis_scope": "Automated paper summary; check the original article"}
 
 def fetch_selected_pmid_articles(pmid: str):
     """Adapt DietNerdV2's selected-PMID lane, retaining authenticated request scope."""
@@ -1412,16 +1428,32 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
     reliability_analysis_df = reliability_analysis_df.where(pd.notnull(reliability_analysis_df), None)
     for col in reliability_analysis_df.select_dtypes(include=np.number).columns:
         reliability_analysis_df[col] = reliability_analysis_df[col].astype(object).where(reliability_analysis_df[col].notnull(), None)
+    # Confirmed poisoned PMID cache row: use only this request's PubMed record.
+    # Do not delete or overwrite the forensic database row.
+    quarantine_pmid = '41723912'
+    if 'article_id' in reliability_analysis_df.columns:
+        reliability_analysis_df = reliability_analysis_df[
+            reliability_analysis_df['article_id'].astype(str) != quarantine_pmid
+        ]
     matched_articles, articles_to_process = article_matching(relevant_articles, reliability_analysis_df)
 
     print("matched articles")
     # Article Processing
+    quarantined_records = [record for record in articles_to_process
+        if str(record['MedlineCitation']['PMID']) == quarantine_pmid]
+    articles_to_process = [record for record in articles_to_process
+        if str(record['MedlineCitation']['PMID']) != quarantine_pmid]
     relevant_article_summaries = concurrent_article_processing(articles_to_process)
 
     # Write Processed Articles to DB
     if conversation_id:
         write_articles_to_db(relevant_article_summaries, env)
 
+    if quarantined_records:
+        from research_audit import fresh_pubmed_metadata, assemble_heavy_sources
+        abstract_sources = assemble_heavy_sources(quarantined_records, [])
+        # Build only abstract-backed source cards; no generated analysis is cached.
+        matched_articles.extend(abstract_sources)
     all_relevant_articles = list(itertools.chain(relevant_article_summaries, matched_articles))
     # V2's selected-PDF lane summarizes user-supplied text separately from
     # retrieved evidence. It is never written to article_analysis.

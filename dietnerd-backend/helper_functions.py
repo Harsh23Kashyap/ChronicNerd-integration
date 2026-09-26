@@ -1670,15 +1670,130 @@ def enforce_heavy_answer(answer: str) -> str:
   text = str(answer or '').strip()
   fallback = ("The available research could not be checked well enough to answer this question. "
               "Try again or review the original studies with a registered dietitian.")
-  if len(text) < 220 or re.search(r"(?im)^[ \t]*What we (?:know|don.t know)[ \t]*:?", text):
+  if not text or re.search(r"(?im)^[ \t]*What we (?:know|don.t know)[ \t]*:?", text):
+    return fallback
+  if re.search(r"\[[A-Za-z][^\]\n]{1,80},\s*20\d{2}\]", text):
     return fallback
   has_refs = bool(re.search(r"(?im)^[ \t]*(?:#{1,4}[ \t]*)?References?[ \t]*:?", text))
-  if (re.search(r"\[\d+\]|\b[A-Z][A-Za-z-]+ et al\.,?\s*\(?20\d{2}\)?", text)
-      and not has_refs):
+  body = re.split(r"(?im)^[ \t]*(?:#{1,4}[ \t]*)?References?[ \t]*:?", text)[0]
+  markers = {int(n) for n in re.findall(r"\[(\d+)\]", body)}
+  if markers and not has_refs:
     return fallback
-  if has_refs and not re.search(r"(?m)^[ \t]*(?:\[\d+\]|\d+\.)[ \t]+.+", text):
+  # Research-mode findings need at least one source marker; an uncited,
+  # long answer may read polished but cannot be checked against the audit.
+  if not markers and re.search(r"\b(?:research|review|study|studies|trial|evidence|intake)\b",body,re.I):
+    return fallback
+  if not markers and re.search(r"\b\d+(?:\.\d+)?\s*(?:g|grams?)\s*(?:/|per )?\s*(?:kg|kilogram)|\b\d{3,4}\s*(?:kcal|calories)\b",body,re.I):
+    return fallback
+  if not markers and re.search(r"\b[A-Z][A-Za-zÀ-ž-]{2,}\s+(?:et\s+al\.?[,]?)?\s*20\d{2}\b",body):
+    return fallback
+  listed = {int(n) for n in re.findall(r"(?m)^[ \t]*\[(\d+)\][ \t]+", text)}
+  if markers and not markers.issubset(listed):
     return fallback
   return text
+
+
+def enforce_retrieved_references(answer: str, articles: list) -> str:
+  """Validate already-assembled references by marker and exact stored citation.
+
+  Older article_analysis rows lack a title; their original PubMed title is
+  reattached by PMID during Heavy processing. A duplicate title substring test
+  wrongly withheld authentic citations when metadata normalization varied.
+  """
+  text = str(answer or '')
+  heading = re.search(r"(?im)^[ \t]*(?:#{1,4}[ \t]*)?References?[ \t]*:?", text)
+  if not heading:
+    return text
+  _, indexed = prepare_indexed_evidence(articles)
+  expected = {str(n): re.sub(r"\W+", " ", str(a.get('citation') or '').casefold()).strip()
+              for n,a in indexed.items()}
+  for line in text[heading.end():].splitlines():
+    match = re.match(r"^[ \t]*(?:\[(\d+)\]|(\d+)\.)[ \t]+(.+)", line)
+    if match:
+      number = match.group(1) or match.group(2)
+      actual = re.sub(r"\W+", " ", match.group(3).casefold()).strip()
+      if not expected.get(number) or actual != expected[number]:
+        return ("The retrieved studies could not be matched to the generated citations. "
+                "This answer is withheld rather than show unverified references.")
+  return text
+
+
+def prepare_indexed_evidence(articles):
+  """Number retrieved sources before synthesis; never number user PDFs."""
+  entries, by_number = [], {}
+  seen = set()
+  for article in articles:
+    if not isinstance(article, dict) or not article.get('title') or not article.get('citation'):
+      continue
+    types = article.get('publication_type') or []
+    type_text = ' '.join(map(str,types)) if isinstance(types,list) else str(types)
+    if (type_text.startswith('User-supplied PDF') or 'retracted publication' in type_text.lower()
+        or article.get('retraction_status') == 'retracted'):
+      continue
+    identity = str(article.get('PMID') or '').strip()
+    if identity and identity in seen:
+      continue
+    if identity:
+      seen.add(identity)
+    number = len(entries) + 1
+    entries.append({**article, 'source_number': number})
+    by_number[number] = article
+  return entries, by_number
+
+
+def expand_grouped_source_markers(text):
+  """Turn numbered multi-source brackets into individual markers.
+
+  Keep unknown IDs intact so the existing source-identity gate rejects them.
+  Never transform author-year brackets or numeric ranges.
+  """
+  return re.sub(r'\[\s*\d+\s*(?:[,;]\s*\d+\s*)+\]',
+                lambda m: ' '.join(f'[{part.strip()}]' for part in re.split(r'[,;]',m.group()[1:-1])),
+                str(text or ''))
+
+
+def strip_model_references(answer):
+  """Reference identity is assembled from retrieved metadata, never generated prose."""
+  text = str(answer or '')
+  heading = re.search(r"(?im)^[ \t]*(?:#{1,4}[ \t]*)?References?[ \t]*:?", text)
+  return text[:heading.start()].rstrip() if heading else text
+
+
+def heavy_personalization_issues(answer, query='', profile_context=''):
+  """Fail closed on narrow unsafe interpretation shapes observed in live Heavy tests."""
+  body = strip_model_references(answer)
+  # A synthesis instruction is not user evidence. The caller passes only the
+  # current user question and actual self-reported context for this check.
+  scope = str(query or '') + '\n' + str(profile_context or '')
+  issues=[]
+  if re.search(r'\\\(|\\\)|\\text\{|\\frac\{|\\,',body):
+    issues.append('raw LaTeX')
+  age_stated = bool(re.search(r'\b(?:age\s*(?:is|:)?\s*\d{2}|\d{2}\s*(?:years? old|y/?o)|under 65|over 65|older adult|senior)\b',scope,re.I))
+  if not age_stated and re.search(r'(?is)(?:older adults?|younger adults?|adults? under 65|≥\s*65|<\s*65|65 years and older)[\s\S]{0,230}\b(?:\d{2,3}\s*(?:kg|×|x)|\d{2,3}(?:\.\d+)?\s*g/day)',body):
+    issues.append('unasked age-band weight conversion')
+  training_stated=bool(re.search(r'\b(?:resistance train|strength train|weightlift|lifting weights|workout|exercise)\w*\b',scope,re.I))
+  if not training_stated and re.search(r'\b(?:assuming|likely|given that)\b[^.!?\n]{0,90}\b(?:resistance|train\w*|exercise)\b',body,re.I):
+    issues.append('assumed training')
+  if not training_stated and re.search(r'\b(?:you(?:r)?|for you|your target|you should|aim(?:ing)? for|I recommend|recommended for you)\b[^.!?\n]{0,110}\b(?:minimum|maximum effective|optimal|recommended|g/kg|grams per kilogram|grams per day|g/day)\b',body,re.I):
+    issues.append('personalized intake endpoint without training')
+  if re.search(r'\b(?:minimum|maximum effective)\s+(?:protein )?intake\b|\b(?:minimum|maximum effective)\s+of\s+\d|\b(?:minimum|maximum effective)\s*:\s*\d',body,re.I):
+    issues.append('unsupported threshold interpretation')
+  return issues
+
+
+def assemble_verified_references(answer, indexed_articles):
+  """Only retrieved records may populate References; reject invented IDs."""
+  text = expand_grouped_source_markers(strip_model_references(answer)).strip()
+  heading = re.search(r"(?im)^[ \t]*(?:#{1,4}[ \t]*)?References?[ \t]*:?", text)
+  body = text[:heading.start()].rstrip() if heading else text
+  markers = {int(n) for n in re.findall(r"\[(\d+)\]", body)}
+  if markers - indexed_articles.keys():
+    return ("The cited studies in this answer were not retrieved. "
+            "This answer is withheld rather than show unverified references.")
+  if not markers:
+    return body
+  lines = [f"[{n}] {indexed_articles[n]['citation']}" for n in sorted(markers)]
+  return body + "\n\nReferences\n" + "\n".join(lines)
 
 
 def generate_final_response(all_relevant_articles, query, attachment_text=None, original_articles=None, recent_history=None, profile_context=None, answer_mode="light"):
