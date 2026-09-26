@@ -171,7 +171,9 @@ function appendInChatSources(content, sources) {
         row.append(number, title);
         section.append(row);
     });
-    content.append(section);
+    const actions = content.querySelector('.message-actions');
+    if (actions) content.insertBefore(section, actions);
+    else content.append(section);
 }
 
 function reconcileInlineCitations(answer, sources) {
@@ -207,6 +209,21 @@ function appendChatMessage(role, text, references = [], storedSources = null) {
         : text;
     content.innerHTML = role === 'assistant' ? formatText(answerBody) : String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;');
     article.append(avatar, content);
+    if (role === 'assistant') {
+        const actions = document.createElement('div');
+        actions.className = 'message-actions';
+        const copy = document.createElement('button');
+        copy.type = 'button'; copy.className = 'copy-answer'; copy.textContent = 'Copy answer';
+        copy.setAttribute('aria-label', 'Copy answer text');
+        copy.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(String(answerBody || ''));
+                copy.textContent = 'Copied';
+                window.setTimeout(() => { if (copy.isConnected) copy.textContent = 'Copy answer'; }, 1800);
+            } catch { document.querySelector('.hint').textContent = 'Could not copy. Check clipboard permission.'; }
+        });
+        actions.append(copy); content.append(actions);
+    }
     thread.appendChild(article);
     enterConversationMode();
     thread.scrollTop = thread.scrollHeight;
@@ -627,17 +644,53 @@ const escapeHtml = (input) => String(input ?? '')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 
-const formatText = (input,disclaimer) => {
-    // Escape untrusted answer/cache text before adding the small supported markup set.
-    let formattedText = escapeHtml(input).replace(/\n/g, '<br>');
-    // Replace **text** with <strong>text</strong>
-    formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    // Replace ###
-    formattedText = formattedText.replace(/### (.*?)(<br>|$)/g, '<strong>$1</strong>$2');
-    // Replace "-" with <li> 
-    formattedText = formattedText.replace(/[-*] (.*?)(<br>|$)/g, '<li>$1</li>');
-    return formattedText;
+function parseAnswerTable(lines, start) {
+    const split = line => line.trim().replace(/^\||\|$/g, '').split('|').map(cell => cell.trim());
+    if (start + 2 >= lines.length || !lines[start].includes('|') || !/^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[start+1])) return null;
+    const headers = split(lines[start]);
+    if (headers.length < 2 || headers.length > 8 || split(lines[start+1]).length !== headers.length) return null;
+    const rows = []; let end = start + 2;
+    while (end < lines.length && lines[end].includes('|') && rows.length < 30) {
+        const cells = split(lines[end]); if (cells.length !== headers.length) break;
+        rows.push(cells); end++;
+    }
+    if (!rows.length) return null;
+    return {headers, rows, end};
 }
+function answerTableMarkup(table) {
+    const cells = table.rows.map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('');
+    return `<div class="answer-table-scroll"><table><thead><tr>${table.headers.map(cell => `<th>${escapeHtml(cell)}</th>`).join('')}</tr></thead><tbody>${cells}</tbody></table></div>`;
+}
+function chartData(table) {
+    // Chart only a simple category + one numeric measure. Units must not be mixed.
+    if (table.headers.length !== 2 || table.rows.length < 2 || table.rows.length > 12) return null;
+    const values = table.rows.map(row => Number(row[1].replace(/,/g, '')));
+    if (values.some((n,i) => !Number.isFinite(n) || n < 0 || !/^\d+(?:,\d{3})*(?:\.\d+)?$/.test(table.rows[i][1])) || Math.max(...values) <= 0) return null;
+    if (table.rows.some(row => !row[0] || row[0].length > 50)) return null;
+    return values;
+}
+function answerChartMarkup(table, values) {
+    const max = Math.max(...values);
+    return `<div class="answer-chart" role="img" aria-label="Chart of ${escapeHtml(table.headers[1])} by ${escapeHtml(table.headers[0])}"><strong>${escapeHtml(table.headers[1])} by ${escapeHtml(table.headers[0])}</strong>${table.rows.map((row,i) => `<div class="chart-row"><span>${escapeHtml(row[0])}</span><div class="chart-track"><div class="chart-bar" style="width:${Math.max(0,Math.min(100,values[i]/max*100)).toFixed(2)}%"></div></div><b>${escapeHtml(row[1])}</b></div>`).join('')}</div>`;
+}
+const formatPlainAnswer = text => escapeHtml(text).replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/### (.*?)(<br>|$)/g, '<strong>$1</strong>$2').replace(/[-*] (.*?)(<br>|$)/g, '<li>$1</li>');
+const formatText = (input) => {
+    const lines = String(input ?? '').split(/\r?\n/);
+    const fragments = [], plain = [];
+    const flush = () => { if (plain.length) { fragments.push(formatPlainAnswer(plain.join('\n'))); plain.length = 0; } };
+    for (let i=0; i<lines.length;) {
+        const table = parseAnswerTable(lines,i);
+        if (!table) { plain.push(lines[i]); i++; continue; }
+        flush();
+        const values = chartData(table);
+        if (values) {
+            const index = fragments.length;
+            fragments.push(`<div class="answer-data" data-table-index="${index}"><button type="button" class="table-chart-toggle" aria-expanded="false">View as chart</button><div class="answer-table-view">${answerTableMarkup(table)}</div><div class="answer-chart-view" hidden>${answerChartMarkup(table,values)}</div></div>`);
+        } else fragments.push(answerTableMarkup(table));
+        i = table.end;
+    }
+    flush(); return fragments.join('<br>');
+};
 
 /**
  * Generates a PDF document based on the formatted text content.
@@ -672,24 +725,46 @@ const generatePDF = async () => {
             for (const line of lines) { pageIfNeeded(1, leading); doc.text(line, margin + indent, y); y += leading; }
             y += gap;
         };
-        write(title, {size:17,bold:true,leading:9,gap:7});
+        doc.setProperties({title, subject:'DietNerd conversation export', creator:'DietNerd'});
+        doc.setFillColor(23,63,53); doc.rect(0,0,width,7,'F');
+        y = 22;
+        write('DIETNERD / CONVERSATION', {size:9,bold:true,leading:6,gap:2});
+        write(title, {size:17,bold:true,leading:9,gap:3});
+        write(`${entries.length} answer${entries.length === 1 ? '' : 's'} · Exported ${new Date().toLocaleDateString()}`, {size:9,leading:5,gap:5});
+        doc.setDrawColor(180,198,181); doc.line(margin,y,width-margin,y); y += 10;
         entries.forEach((entry, index) => {
-            pageIfNeeded(3);
-            write(`Question ${index + 1}`, {size:11,bold:true,leading:7});
-            write(entry.raw_question || 'Question unavailable', {size:11,leading:6,gap:4});
-            write('Answer', {size:11,bold:true,leading:7,gap:1});
-            String(entry.answer || '').split(/\r?\n/).forEach(raw => {
-                const line = raw.trim();
-                if (!line) { y += 2; return; }
+            pageIfNeeded(5);
+            write(`QUESTION ${String(index + 1).padStart(2,'0')}`, {size:9,bold:true,leading:6,gap:1});
+            write(entry.raw_question || 'Question unavailable', {size:12,bold:true,leading:7,gap:6});
+            const lines = String(entry.answer || '').split(/\r?\n/);
+            for (let i=0; i<lines.length;) {
+                const table = parseAnswerTable(lines,i);
+                if (table) {
+                    y += 2;
+                    [table.headers,...table.rows].forEach((row,rowIndex) => {
+                        pageIfNeeded(1,6);
+                        write(row.join('  |  '), {size:9,bold:rowIndex===0,leading:5});
+                    });
+                    y += 3; i=table.end; continue;
+                }
+                const line = lines[i++].trim();
+                if (!line) { y += 2; continue; }
                 const heading = line.match(/^#{1,6}\s+(.+)$/);
-                if (heading) { write(heading[1].replace(/\*\*/g,''), {size:11,bold:true,leading:7,gap:2}); return; }
+                if (heading) { y += 2; write(heading[1].replace(/\*\*/g,''), {size:11,bold:true,leading:7,gap:2}); continue; }
                 const bullet = line.match(/^[-*]\s+(.+)$/);
-                if (bullet) { write('•  ' + bullet[1].replace(/\*\*/g,''), {indent:4,leading:6}); return; }
+                if (bullet) { write('•  ' + bullet[1].replace(/\*\*/g,''), {indent:4,leading:6}); continue; }
                 write(line.replace(/\*\*/g,''), {leading:6});
-            });
-            y += 9;
+            }
+            y += 7;
+            doc.setDrawColor(205,219,206); if (index < entries.length-1) { pageIfNeeded(1); doc.line(margin,y,width-margin,y); y += 9; }
         });
+        y += 4;
         write('DietNerd is an exploratory tool. Check important health information with a qualified professional.', {size:8,leading:5});
+        const pages = doc.internal.getNumberOfPages();
+        for (let page=1;page<=pages;page++) {
+            doc.setPage(page); doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(100,112,102);
+            doc.text(`DietNerd  ·  ${page} / ${pages}`,width-margin,height-10,{align:'right'});
+        }
         doc.save(filename);
     } catch (error) {
         document.querySelector('.hint').textContent = error.message || 'Could not prepare PDF.';
@@ -850,25 +925,47 @@ function appendPendingMessage() {
     const note = document.createElement('p');
     note.className = 'pending-note';
     note.textContent = 'Searching published research can take a minute. Please keep this page open.';
+    const journey = document.createElement('section');
+    journey.className = 'research-journey';
+    journey.setAttribute('aria-label', 'Research journey');
+    const journeyHead = document.createElement('div');
+    journeyHead.className = 'research-journey-head';
+    const journeyTitle = document.createElement('strong');
+    journeyTitle.textContent = 'Research journey';
+    const elapsed = document.createElement('span');
+    elapsed.className = 'research-elapsed';
+    elapsed.textContent = 'Just started';
+    journeyHead.append(journeyTitle, elapsed);
     const steps = document.createElement('ol');
     steps.className = 'research-steps';
     const articleList = document.createElement('div');
     articleList.className = 'progress-articles';
-    const labels = ['Understanding question', 'Searching papers', 'Reading studies', 'Synthesizing answer'];
-    labels.forEach(label => { const step = document.createElement('li'); step.textContent = label; steps.append(step); });
+    const labels = ['Understand the question', 'Find research', 'Check relevant studies', 'Write the answer'];
+    labels.forEach(label => {
+        const step = document.createElement('li');
+        const marker = document.createElement('span'); marker.className = 'research-step-marker'; marker.setAttribute('aria-hidden', 'true');
+        const name = document.createElement('span'); name.textContent = label;
+        step.append(marker, name); steps.append(step);
+    });
+    journey.append(journeyHead, steps);
     let stage = 0;
+    let latestStatus = '';
+    const startedAt = Date.now();
     function renderStage() {
         [...steps.children].forEach((step, index) => {
             step.classList.toggle('active', index === stage);
             step.classList.toggle('complete', index < stage);
+            if (index === stage) step.setAttribute('aria-current', 'step');
+            else step.removeAttribute('aria-current');
         });
+        journey.setAttribute('aria-label', `Research journey: ${labels[stage]}`);
     }
     renderStage();
     const stageTimer = window.setInterval(() => {
-        // A pulse shows activity; only a real server event advances a stage.
-        steps.classList.toggle('pulse');
-    }, 1200);
-    content.append(status, note, steps, articleList);
+        const seconds = Math.floor((Date.now() - startedAt) / 1000);
+        if (!journey.classList.contains('paused')) elapsed.textContent = seconds < 60 ? `${seconds}s elapsed` : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, '0')}s elapsed`;
+    }, 1000);
+    content.append(status, note, journey, articleList);
     article.append(avatar, content);
     thread.appendChild(article);
     enterConversationMode();
@@ -881,11 +978,21 @@ function appendPendingMessage() {
             const list = document.createElement('ul');
             (update.article_titles || []).slice(0,5).forEach(title => { const li = document.createElement('li'); li.textContent = title; list.appendChild(li); });
             articleList.append(heading, list);
+            stage = Math.max(stage, update.stage === 'relevant' ? 2 : 1);
+            renderStage();
             note.textContent = update.note || 'Retrieved titles do not prove support for the answer.';
             thread.scrollTop = thread.scrollHeight;
         },
         setStatus(text) {
+            if (text === latestStatus) return;
+            latestStatus = text;
             status.textContent = text;
+            if (/Connection interrupted/i.test(text)) {
+                journey.classList.add('paused');
+                elapsed.textContent = 'Reconnecting';
+                return;
+            }
+            journey.classList.remove('paused');
             if (/Generated PubMed queries|Retrieved .* Articles/i.test(text)) stage = Math.max(stage, 1);
             if (/Classified .* Relevant Articles|Processed .* Articles/i.test(text)) stage = Math.max(stage, 2);
             if (/Processed .* Articles/i.test(text)) stage = 3;
@@ -1693,3 +1800,42 @@ function beginRename(item, conversation) {
     });
     input.addEventListener('blur', save);
 }
+
+
+// Chart state is per answer. Plain Markdown tables and nonnumeric values stay as tables.
+document.getElementById('chat-thread').addEventListener('click', event => {
+    const button = event.target.closest('.table-chart-toggle');
+    if (!button) return;
+    const container = button.closest('.answer-data');
+    const chart = container.querySelector('.answer-chart-view');
+    const table = container.querySelector('.answer-table-view');
+    const show = chart.hidden;
+    chart.hidden = !show; table.hidden = show;
+    button.textContent = show ? 'View as table' : 'View as chart';
+    button.setAttribute('aria-expanded', String(show));
+});
+
+// Dictation only fills the composer. It never sends a question without a separate click.
+(() => {
+    if (!window.isSecureContext || !(window.SpeechRecognition || window.webkitSpeechRecognition)) return;
+    const button = document.getElementById('voice-input');
+    const input = document.getElementById('question');
+    button.hidden = false;
+    let active = false, recognition = null;
+    button.addEventListener('click', () => {
+        if (active) { recognition.stop(); return; }
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition(); recognition.lang = navigator.language || 'en-IN';
+        recognition.interimResults = true; recognition.continuous = false;
+        const original = input.value.trimEnd();
+        recognition.onstart = () => { active = true; button.setAttribute('aria-pressed','true'); button.title = 'Stop dictation'; };
+        recognition.onresult = event => {
+            const words = Array.from(event.results).map(result => result[0].transcript).join(' ').trim();
+            input.value = original ? `${original} ${words}` : words;
+            input.dispatchEvent(new Event('input',{bubbles:true}));
+        };
+        recognition.onerror = event => { document.querySelector('.hint').textContent = event.error === 'not-allowed' ? 'Microphone access was denied. You can still type your question.' : 'Dictation stopped. You can type or try again.'; };
+        recognition.onend = () => { active = false; button.setAttribute('aria-pressed','false'); button.title = 'Dictate message'; input.focus(); };
+        try { recognition.start(); } catch { document.querySelector('.hint').textContent = 'Could not start dictation. Type your question instead.'; }
+    });
+})();
