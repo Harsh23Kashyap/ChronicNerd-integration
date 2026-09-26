@@ -1383,7 +1383,7 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
     loop.run_until_complete(send_update(request_id, "Generated PubMed queries..."))
     # Article Retrieval
     start_api = time.time()
-    deduplicated_articles_collected = collect_articles(query_list)
+    deduplicated_articles_collected = collect_articles(query_list, retmax=15) if answer_mode == "heavy" else collect_articles(query_list)
     end_api = time.time()
 
     print("Retrieved Articles")
@@ -1449,18 +1449,19 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
     # explicitly asks for a per-kg calculation. Retry synthesis once, never
     # retrieval: private measurements stay out of PubMed queries.
     weight_match = re.search(r"\b(?:body )?weight\s*(?:is|:|=)?\s*(\d{2,3}(?:\.\d+)?)\s*kg\b", profile_prompt, re.I) if profile_prompt else None
-    if weight_match and re.search(r"\bprotein\b", pipeline_query, re.I) and re.search(r"(?:calculat|range|body weight|my weight|daily)", pipeline_query, re.I):
+    if weight_match and re.search(r"\bprotein\b", pipeline_query + ' ' + raw_question, re.I) and re.search(r"(?:calculat|range|body weight|my weight|daily|muscle)", pipeline_query + ' ' + raw_question, re.I):
         weight = weight_match.group(1)
         mentions_weight = bool(re.search(rf"\b{re.escape(weight)}\s*(?:kg|kilograms?)\b", final_output, re.I))
         # If the answer gives a supported g/kg range, the requested g/day
         # conversion is only a unit calculation, not a new clinical target.
         per_kg_range = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:to|[-–])\s*(\d+(?:\.\d+)?)\s*(?:g|grams?)\s*(?:of protein)?\s*(?:per|/)\s*(?:kg|kilogram)", final_output, re.I)
         has_daily_result = bool(re.search(r"\b\d+(?:\.\d+)?\s*(?:to|[-–])\s*\d+(?:\.\d+)?\s*(?:g|grams?)\s*(?:/|per )?\s*(?:day|daily)\b", final_output, re.I))
-        if not mentions_weight or (per_kg_range and not has_daily_result):
+        has_any_daily_result = bool(re.search(r"\b\d+(?:\.\d+)?\s*(?:g|grams?)\s*(?:/|per )?\s*(?:day|daily)\b", final_output, re.I))
+        if not mentions_weight or (per_kg_range and not has_daily_result) or (answer_mode == "heavy" and not has_any_daily_result):
             logging.warning("Personalized answer omitted weight or requested arithmetic; retrying synthesis once")
             final_output = generate_final_response(
                 all_relevant_articles,
-                pipeline_query + f"\nFor this question, the self-reported body weight is {weight} kg. If the supplied human research supports a per-kg range, calculate the corresponding gram range, show multiplication and name study limits. If it does not, say no personal range is established; do not invent one.",
+                pipeline_query + f"\nFor this question, the self-reported body weight is {weight} kg. If the supplied human research supports a per-kg range or upper bound, calculate its corresponding grams/day using {weight} kg, show multiplication and name study limits. If it does not, say no personal range is established; do not invent one.",
                 user_attachment_context, original_articles=relevant_articles,
                 recent_history=session_memory[-8:], profile_context=profile_prompt or None,
                 answer_mode=answer_mode)
@@ -1484,6 +1485,11 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
                     heading = re.search(r"(?im)^[ \t]*What we don.t know[ \t]*:?[ \t]*$", final_output)
                     if heading:
                         final_output = final_output[:heading.start()].rstrip() + arithmetic + "\n" + final_output[heading.start():]
+                    elif answer_mode == "heavy":
+                        references = re.search(r"(?im)^[ \t]*(?:#{1,4}[ \t]*)?References?[ \t]*:?", final_output)
+                        pos = references.start() if references else final_output.find('DietNerd is an exploratory tool')
+                        if pos < 0: pos = len(final_output)
+                        final_output = final_output[:pos].rstrip() + "\n\n" + arithmetic.strip() + "\n\n" + final_output[pos:]
     if attachment_partial_answer:
         final_output = attachment_partial_answer + "\n\n" + final_output
     end_output = time.time()

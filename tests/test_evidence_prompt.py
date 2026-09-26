@@ -97,8 +97,29 @@ class RawPubMedComparisonTest(unittest.TestCase):
             h.generate_final_response([{'summary': 'A cached summary without original metadata'}],
                                       'Compare Mediterranean and low-carbohydrate diets',
                                       original_articles=original)
-        create.assert_called_once()
+        self.assertEqual(create.call_count, 2)  # bounded structure-repair retry
 
     def test_comparison_does_not_qualify_from_generated_summary(self):
         source = {'title': 'Mediterranean diet and CKD', 'summary': 'Compared it with low carbohydrate diets'}
         self.assertFalse(h.article_directly_compares(source, 'mediterranean', 'low-carbohydrate diets'))
+
+class HeavyStructureRepairTest(unittest.TestCase):
+    def test_valid_three_part_answer_survives_ownline_headings(self):
+        answer = "What we know\nSupported.\n\nWhat we don't know\nMissing.\n\nWhat to ask a dietitian\nWhat matters?"
+        self.assertEqual(h.enforce_three_part_answer(answer), answer)
+    def test_heavy_retries_shape_once_but_never_publishes_invalid_reply(self):
+        from types import SimpleNamespace
+        bad = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='Loose clinical advice'))])
+        with patch.object(h.client.chat.completions, 'create', return_value=bad) as create:
+            result = h.generate_final_response([], 'protein', answer_mode='heavy')
+        self.assertEqual(create.call_count, 2)
+        self.assertIn('could not be checked', result)
+        self.assertNotIn('Loose clinical advice', result)
+    def test_unlinked_author_year_retries_then_stops(self):
+        from types import SimpleNamespace
+        bare = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="What we know\nMorton et al., 2018 says X.\nWhat we don't know\nUnknown.\nWhat to ask a dietitian\nAsk?"))])
+        with patch.object(h.client.chat.completions, 'create', return_value=bare) as create:
+            result = h.generate_final_response([], 'protein')
+        self.assertEqual(create.call_count, 2)
+        self.assertIn('answer-structure check', result)
+        self.assertNotIn('Morton et al.', result)

@@ -19,3 +19,13 @@ class AnimalOnlyGuardTest(unittest.TestCase):
   self.assertFalse(h.is_animal_only_article(self.article('Comparative mechanism',mesh=['Animals','Humans'])))
  def test_human_study_with_rat_background_not_auto_rejected(self):
   self.assertFalse(h.is_animal_only_article(self.article('Human trial informed by work in rats',abstract='Participants were adults.')))
+
+class HeavyRetrievalDepthTest(unittest.TestCase):
+ def test_heavy_uses_fifteen_per_query_and_light_ten(self):
+  with patch.object(h, 'article_retrieval', return_value=[]) as retrieve:
+   h.collect_articles(['one','two'],retmax=15)
+  self.assertEqual(retrieve.call_count,2)
+  self.assertEqual(retrieve.call_args.kwargs['retmax'],15)
+  with patch.object(h, 'article_retrieval', return_value=[]) as retrieve:
+   h.collect_articles(['one'])
+  retrieve.assert_called_once_with('one')

@@ -1789,6 +1789,8 @@ let paperContext = null;
             if (!documents.length) profileFileStatus.textContent = 'No profile files saved.';
         } catch (err) { profileFileStatus.textContent = err.message; }
     }
+    const profileFileName = document.getElementById('profile-file-name');
+    profileFileInput.addEventListener('change', () => { profileFileName.textContent = profileFileInput.files[0]?.name || 'No file chosen'; });
     document.getElementById('profile-file-upload').addEventListener('click', async () => {
         const file = profileFileInput.files[0];
         if (!file) { profileFileStatus.textContent = 'Choose a file first.'; return; }
@@ -1801,6 +1803,7 @@ let paperContext = null;
             const response = await apiFetch('/profile/documents', {method: 'POST', body: payload});
             if (!response.ok) throw new Error(await DietNerdAPI.readError(response, 'Could not add file.'));
             profileFileInput.value = '';
+            profileFileName.textContent = 'No file chosen';
             profileFileStatus.textContent = `${file.name} saved to your profile.`;
             await loadProfileFiles();
             profileFileStatus.textContent = `${file.name} saved to your profile.`;

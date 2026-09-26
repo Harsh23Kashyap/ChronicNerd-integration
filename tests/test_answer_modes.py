@@ -119,7 +119,7 @@ class HeavyPromptContractTest(unittest.TestCase):
    instruction=h.client.chat.completions.create.call_args.kwargs['messages'][0]['content']
    self.assertIn('up to 20', instruction)
    self.assertIn('Do not invent studies',instruction)
-   self.assertIn('study design, population',instruction)
+   self.assertIn('study designs, human populations',instruction)
   finally:h.client=old
 
 class PersonalizedArithmeticFallbackTest(unittest.TestCase):
@@ -143,3 +143,20 @@ class PersonalizedArithmeticFallbackTest(unittest.TestCase):
   self.assertIn('not an individualized recommendation',result['end_output'])
   self.assertEqual(retrieval.call_count,1)
   self.assertNotIn('72',str(retrieval.call_args))
+
+class HeavyPersonalizationTest(unittest.TestCase):
+ def test_heavy_retries_if_weight_present_but_daily_math_missing(self):
+  import pandas as pd
+  with patch.object(main,'get_session_memory',return_value=[]),patch.object(main,'check_attachment_exists',return_value=False),\
+       patch.object(main,'get_diet_profile_prompt',return_value='additional notes: weight 72 kg; height 175 cm'),\
+       patch.object(main,'get_profile_documents',return_value=[]),patch.object(main,'query_generation',return_value=('q','q',['q'])),\
+       patch.object(main,'collect_articles',return_value=[]),patch.object(main,'concurrent_relevance_classification',return_value=([],[])),\
+       patch.object(main,'connect_to_reliability_analysis_db',return_value=pd.DataFrame([{'x':1}])),\
+       patch.object(main,'article_matching',return_value=([],[])),patch.object(main,'concurrent_article_processing',return_value=[]),\
+       patch.object(main,'generate_final_response',side_effect=['Protein for a 72 kg person may be 1.6 g/kg/day.','For 72 kg, 72 x 1.6 = 115.2 g/day.']) as synthesis,\
+       patch.object(main,'write_articles_to_db'),patch.object(main,'write_output_to_db'),patch.object(main,'append_session_memory'),\
+       patch.object(main,'get_conversation_summary',return_value=''),patch.object(main,'update_conversation_summary',return_value=''),\
+       patch.object(main,'set_conversation_summary'),patch.object(main,'send_update'):
+   result=main.process_user_query('Protein for muscle with my weight?','req','owner@example.com','conv',answer_mode='heavy')
+  self.assertEqual(synthesis.call_count,2)
+  self.assertIn('115.2 g/day',result['end_output'])

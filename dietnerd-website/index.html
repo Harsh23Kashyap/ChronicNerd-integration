@@ -158,7 +158,7 @@
             <div class="profile-files">
                 <label for="profile-file-input">Profile files</label>
                 <p class="profile-note">PDF, TXT or CSV, up to 5 MB each. Saved privately to your account. Used only when “Use my profile” is on in a saved conversation; never in Temporary.</p>
-                <input id="profile-file-input" type="file" accept=".pdf,.txt,.csv,application/pdf,text/plain,text/csv">
+                <div class="profile-file-picker"><input id="profile-file-input" type="file" accept=".pdf,.txt,.csv,application/pdf,text/plain,text/csv" aria-describedby="profile-file-name"><label for="profile-file-input" class="profile-file-button">Choose file</label><span id="profile-file-name" aria-live="polite">No file chosen</span></div>
                 <button type="button" id="profile-file-upload" class="secondary-button">Add profile file</button>
                 <ul id="profile-file-list" aria-label="Saved profile files"></ul>
                 <p id="profile-file-status" class="profile-note" role="status"></p>
@@ -166,7 +166,7 @@
             <p id="profile-error" class="dialog-error" role="alert"></p>
             <p id="profile-success" class="dialog-success" role="status"></p>
             <div class="dialog-actions">
-                <button type="button" id="profile-clear" class="secondary-button">Clear profile</button>
+                <button type="button" id="profile-clear" class="danger-button">Clear profile</button>
                 <button type="button" id="profile-cancel" class="secondary-button">Close</button>
                 <button type="submit" id="profile-save" class="primary-button">Save profile</button>
             </div>
