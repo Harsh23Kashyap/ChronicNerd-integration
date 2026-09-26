@@ -101,7 +101,7 @@ body:after{display:none}
 #container,body.conversation-mode #container{flex:1 1 auto;min-height:0;width:min(1380px,calc(100% - 32px));margin:0 auto;padding:12px 0 16px}
 .hero{display:none}
 .chat-shell,body.conversation-mode .chat-shell{height:100%;min-height:0;max-height:none;margin:0;border-radius:14px;grid-template-columns:250px minmax(0,1fr);box-shadow:0 4px 24px rgba(23,63,53,.06)}
-.chat-panel,body.conversation-mode .chat-panel{height:100%;min-height:0;max-height:none;grid-template-rows:56px minmax(0,1fr) auto auto auto}
+.chat-panel,body.conversation-mode .chat-panel{height:100%;min-height:0;max-height:none;grid-template-rows:56px minmax(0,1fr) auto auto auto auto}
 .chat-header,.conversation-mode .chat-header{height:56px;padding:0 clamp(18px,3vw,36px)}
 .chat-thread,.conversation-mode .chat-thread{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:24px clamp(18px,4vw,54px)}
 .welcome-message{min-height:100%;width:100%;max-width:680px;align-items:center;justify-content:center}
@@ -542,3 +542,31 @@ html[data-theme=dark] .composer #voice-input{color:#c4df72}
 @media(max-width:550px){.chart-row{grid-template-columns:minmax(60px,1fr) minmax(65px,2fr) auto}.chat-message.assistant .message-actions{margin-left:0}}
 .composer{grid-template-columns:auto minmax(0,1fr) auto auto}
 .composer #voice-input{align-self:center;display:grid;place-items:center}
+
+/* Optional navigation stays out of the way until there is a thread to navigate. */
+.conversation-chapters{display:flex;gap:12px;align-items:center;border-top:1px solid var(--line);padding:7px clamp(18px,3vw,36px);font:600 10px "DM Sans",sans-serif;min-width:0}
+.conversation-chapters[hidden],.followup-lens[hidden],.thread-jump[hidden]{display:none!important}
+.conversation-chapters>span{flex:none;color:var(--muted)}#chapter-links{display:flex;gap:6px;overflow-x:auto;scrollbar-width:thin;min-width:0}
+#chapter-links button{flex:none;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:transparent;border:1px solid var(--line);border-radius:6px;color:var(--forest);padding:4px 7px;cursor:pointer;font:600 10px "DM Sans",sans-serif}
+#chapter-links button:hover,#chapter-links button:focus-visible{background:#edf4e9;outline:2px solid var(--forest-2)}
+.thread-jump{position:absolute;right:20px;bottom:128px;z-index:2;display:flex;gap:6px}.thread-jump button{border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--forest);padding:8px 10px;box-shadow:0 4px 12px #173f351c;cursor:pointer;font:700 10px "DM Sans",sans-serif}
+.followup-lens{display:flex;align-items:center;gap:8px;margin:0 0 7px;font:11px "DM Sans",sans-serif;color:var(--muted);min-width:0}.followup-lens strong{color:var(--forest);white-space:nowrap}.followup-lens span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.followup-lens button{border:0;background:transparent;color:var(--forest-2);text-decoration:underline;cursor:pointer;white-space:nowrap;font:700 10px "DM Sans",sans-serif}
+.research-replay{margin-top:12px;border-top:1px solid var(--line);padding-top:10px;font-size:11px}.research-replay summary{cursor:pointer;font-weight:700;color:var(--forest)}.research-replay p{color:var(--muted);margin:7px 0}.research-replay ol{padding-left:18px;margin:7px 0}.research-replay li{padding:4px 0}
+.chart-row{grid-template-columns:minmax(80px,1fr) minmax(90px,3fr) auto auto}.ask-chart-point{border:1px solid var(--line);background:var(--paper);color:var(--forest);font:700 10px "DM Sans",sans-serif;border-radius:6px;padding:4px 6px;cursor:pointer}.ask-chart-point:hover{background:#edf4e9}
+html[data-theme=dark] .thread-jump button,html[data-theme=dark] .ask-chart-point{background:#29372e;color:#c4df72}
+@media(max-width:800px){.conversation-chapters{padding:6px 12px}.conversation-chapters>span{display:none}.thread-jump{bottom:115px;right:12px}.followup-lens{font-size:10px}.followup-lens span{display:none}.chart-row{grid-template-columns:minmax(60px,1fr) minmax(65px,2fr) auto auto}}
+@media(prefers-reduced-motion:reduce){.thread-jump *,#chapter-links *{scroll-behavior:auto}}
+
+/* Accessible sun/moon switch; clouds cross the orb on change only. */
+.theme-toggle{display:inline-grid!important;place-items:center!important;width:43px!important;height:35px!important;min-width:43px!important;padding:0!important;overflow:hidden!important;position:relative!important;vertical-align:middle!important}
+.theme-toggle:focus-visible{outline:3px solid var(--forest-2,#255b4d)!important;outline-offset:2px}
+.theme-sky{width:27px;height:23px;position:relative;display:block}.theme-orb{position:absolute;left:7px;top:4px;width:16px;height:16px;border-radius:50%;background:#d99b49;box-shadow:0 0 0 3px #d99b4930;transition:background .32s,box-shadow .32s,transform .32s}
+.theme-cloud{position:absolute;left:-11px;top:11px;width:17px;height:6px;border-radius:8px;background:var(--paper);box-shadow:7px -3px 0 -1px var(--paper);opacity:0;pointer-events:none}
+html[data-theme=dark] .theme-orb{background:#dce5df;box-shadow:inset -5px -2px 0 #7e9b8c;transform:rotate(-18deg)}
+.theme-toggle.theme-just-changed .theme-cloud{animation:cloud-cross .4s ease-out both}@keyframes cloud-cross{0%{transform:translateX(0);opacity:0}30%{opacity:.9}100%{transform:translateX(47px);opacity:0}}
+@media(prefers-reduced-motion:reduce){.theme-orb{transition:none}.theme-toggle.theme-just-changed .theme-cloud{animation:none}}
+
+.thread-jump button[hidden]{display:none}.thread-jump{bottom:145px}.chat-message:not(.pending){animation:messageIn .17s ease-out both}@keyframes messageIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media(max-width:800px){.thread-jump{bottom:140px}}@media(prefers-reduced-motion:reduce){.chat-message:not(.pending){animation:none}}
+
+html[data-theme=dark] .research-replay,html[data-theme=dark] .chat-message.assistant .message-actions{border-color:#58705e}html[data-theme=dark] .conversation-chapters{border-color:#58705e}html[data-theme=dark] #chapter-links button{color:#c4df72;border-color:#58705e}html[data-theme=dark] .followup-lens strong,html[data-theme=dark] .followup-lens button{color:#c4df72}

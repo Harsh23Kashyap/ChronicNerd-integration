@@ -22,7 +22,7 @@
         <a href="index.html">Home</a>
         <a href="about.html">About</a>
         <a href="contact.html">Contact</a>
-        <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
+        <button type="button" class="theme-toggle" data-theme-toggle aria-label="Switch to dark mode" title="Switch to dark mode"><span class="theme-sky" aria-hidden="true"><span class="theme-orb"></span><span class="theme-cloud"></span></span></button>
         <div class="account-menu">
             <button type="button" id="account-button" aria-haspopup="true" aria-expanded="false"><span id="account-email">Account</span></button><span id="session-countdown" role="status" aria-live="off" title="Time until automatic sign-out" hidden></span>
             <div id="account-dropdown" class="account-dropdown" hidden>
@@ -95,11 +95,14 @@
                         <div id="example-questions" class="starter-questions" aria-label="Example questions"><button type="button" class="example-question">How much protein do I need daily?</button><button type="button" class="example-question">Is coffee good for heart health?</button><button type="button" class="example-question">What helps with iron deficiency?</button></div></div>
                     </div>
                 </div>
+                <nav id="conversation-chapters" class="conversation-chapters" aria-label="Questions in this conversation" hidden><span>In this conversation</span><div id="chapter-links"></div></nav>
+                <div class="thread-jump" hidden><button type="button" id="previous-message" aria-label="Scroll to previous message">↑ Previous message</button><button type="button" id="latest-message" aria-label="Scroll to latest message">↓ Latest</button></div>
                 <p class="hint" role="status" aria-live="polite"></p>
                 <div class="similar-questions" id="similarQuestions"></div>
                 <div class="composer-wrap">
                     <div id="paper-chip-row" class="paper-chip-row" hidden><span id="paper-chip-text"></span><a id="paper-chip-link" target="_blank" rel="noopener noreferrer" hidden>Open paper</a><button type="button" id="paper-clear" aria-label="Remove paper">×</button></div>
                     <div id="existing-attachments" class="existing-attachments"></div>
+                    <div id="followup-lens" class="followup-lens" hidden><strong>Continuing this conversation</strong><span id="followup-context"></span><button type="button" id="view-context" aria-label="View earlier questions">Review questions</button></div>
                     <div class="composer">
                         <input type="file" id="attachment-file" accept=".pdf,.txt,.csv" class="visually-hidden">
                         <button type="button" id="attach-button" title="Attach a file" onclick="document.getElementById('attachment-file').click()" aria-label="Attach a file">＋</button>

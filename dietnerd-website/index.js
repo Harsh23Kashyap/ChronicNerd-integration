@@ -28,6 +28,9 @@ function clearPaperScope() {
 
 function clearChatThread() {
     document.getElementById('chat-thread').innerHTML = '';
+    document.getElementById('conversation-chapters').hidden = true;
+    document.querySelector('.thread-jump').hidden = true;
+    document.getElementById('followup-lens').hidden = true;
 }
 
 function enterConversationMode() {
@@ -225,6 +228,7 @@ function appendChatMessage(role, text, references = [], storedSources = null) {
         actions.append(copy); content.append(actions);
     }
     thread.appendChild(article);
+    if (role === 'user') { updateConversationNavigation(); updateFollowupLens(); }
     enterConversationMode();
     thread.scrollTop = thread.scrollHeight;
     return content;
@@ -341,6 +345,7 @@ async function renderSelectedConversation(conversationId) {
         document.getElementById('generate-pdf-button').classList.toggle('hidden', !entries.length);
         if (!entries.length) thread.innerHTML = '<div class="history-loading empty-history">This conversation has no completed answers yet.</div>';
         document.getElementById('question').value = '';
+        updateConversationNavigation(); updateFollowupLens();
     } catch (err) {
         if (token === conversationLoadToken) {
             thread.innerHTML = '';
@@ -671,7 +676,7 @@ function chartData(table) {
 }
 function answerChartMarkup(table, values) {
     const max = Math.max(...values);
-    return `<div class="answer-chart" role="img" aria-label="Chart of ${escapeHtml(table.headers[1])} by ${escapeHtml(table.headers[0])}"><strong>${escapeHtml(table.headers[1])} by ${escapeHtml(table.headers[0])}</strong>${table.rows.map((row,i) => `<div class="chart-row"><span>${escapeHtml(row[0])}</span><div class="chart-track"><div class="chart-bar" style="width:${Math.max(0,Math.min(100,values[i]/max*100)).toFixed(2)}%"></div></div><b>${escapeHtml(row[1])}</b></div>`).join('')}</div>`;
+    return `<div class="answer-chart" role="img" aria-label="Chart of ${escapeHtml(table.headers[1])} by ${escapeHtml(table.headers[0])}"><strong>${escapeHtml(table.headers[1])} by ${escapeHtml(table.headers[0])}</strong>${table.rows.map((row,i) => `<div class="chart-row"><span>${escapeHtml(row[0])}</span><div class="chart-track"><div class="chart-bar" style="width:${Math.max(0,Math.min(100,values[i]/max*100)).toFixed(2)}%"></div></div><b>${escapeHtml(row[1])}</b><button type="button" class="ask-chart-point" data-category="${escapeHtml(row[0])}" data-value="${escapeHtml(row[1])}" data-measure="${escapeHtml(table.headers[1])}" aria-label="Ask about ${escapeHtml(row[0])}">Ask</button></div>`).join('')}</div>`;
 }
 const formatPlainAnswer = text => escapeHtml(text).replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/### (.*?)(<br>|$)/g, '<strong>$1</strong>$2').replace(/[-*] (.*?)(<br>|$)/g, '<li>$1</li>');
 const formatText = (input) => {
@@ -684,8 +689,7 @@ const formatText = (input) => {
         flush();
         const values = chartData(table);
         if (values) {
-            const index = fragments.length;
-            fragments.push(`<div class="answer-data" data-table-index="${index}"><button type="button" class="table-chart-toggle" aria-expanded="false">View as chart</button><div class="answer-table-view">${answerTableMarkup(table)}</div><div class="answer-chart-view" hidden>${answerChartMarkup(table,values)}</div></div>`);
+            fragments.push(`<div class="answer-data"><button type="button" class="table-chart-toggle" aria-expanded="false">View as chart</button><div class="answer-table-view">${answerTableMarkup(table)}</div><div class="answer-chart-view" hidden>${answerChartMarkup(table,values)}</div></div>`);
         } else fragments.push(answerTableMarkup(table));
         i = table.end;
     }
@@ -950,6 +954,9 @@ function appendPendingMessage() {
     journey.append(journeyHead, steps);
     let stage = 0;
     let latestStatus = '';
+    const replay = [];
+    const record = (label) => { if (replay.at(-1) !== label && replay.length < 24) replay.push(label); };
+    record('Question received');
     const startedAt = Date.now();
     function renderStage() {
         [...steps.children].forEach((step, index) => {
@@ -971,6 +978,7 @@ function appendPendingMessage() {
     enterConversationMode();
     thread.scrollTop = thread.scrollHeight;
     return {
+        replay() { return replay.slice(); },
         addArticles(update) {
             articleList.replaceChildren();
             const heading = document.createElement('strong');
@@ -978,6 +986,7 @@ function appendPendingMessage() {
             const list = document.createElement('ul');
             (update.article_titles || []).slice(0,5).forEach(title => { const li = document.createElement('li'); li.textContent = title; list.appendChild(li); });
             articleList.append(heading, list);
+            record(update.stage === 'relevant' ? 'Relevant paper titles retrieved' : 'Paper titles retrieved');
             stage = Math.max(stage, update.stage === 'relevant' ? 2 : 1);
             renderStage();
             note.textContent = update.note || 'Retrieved titles do not prove support for the answer.';
@@ -986,6 +995,7 @@ function appendPendingMessage() {
         setStatus(text) {
             if (text === latestStatus) return;
             latestStatus = text;
+            if (/Generated PubMed queries|Retrieved .* Articles|Classified .* Relevant Articles|Processed .* Articles/i.test(text)) record(text.slice(0,130));
             status.textContent = text;
             if (/Connection interrupted/i.test(text)) {
                 journey.classList.add('paused');
@@ -1077,11 +1087,12 @@ function appendFollowups(content, question, answer) {
     content.append(box);
 }
 
-function showAssistantAnswer(answer, ledger = [], question = '', storedSources = null) {
+function showAssistantAnswer(answer, ledger = [], question = '', storedSources = null, replay = null) {
     const content = appendChatMessage('assistant', answer, [], storedSources);
     appendEvidenceLedger(content, ledger);
     appendInChatSources(content, sourcesForAnswer(answer, ledger, storedSources));
     appendFollowups(content, question, answer);
+    if (replay?.length) appendResearchReplay(content, replay);
     if (!temporaryChat) document.getElementById('generate-pdf-button').classList.remove('hidden');
 }
 
@@ -1188,7 +1199,7 @@ async function generateAnswer(question) {
         }
         const result = await runGeneration(question, pending);
         pending.remove();
-        showAssistantAnswer(result.end_output, result.evidence_ledger || [], question, result.session_memory_entry?.sources || null);
+        showAssistantAnswer(result.end_output, result.evidence_ledger || [], question, result.session_memory_entry?.sources || null, pending.replay());
         if (temporaryChat) temporaryTurns.push({raw_question: question.slice(0, 2000), answer: result.end_output.slice(0, 15000)});
         refreshTitleAfterAnswer(getConversationId());
     } catch (err) {
@@ -1206,7 +1217,7 @@ async function answerFromAttachment(question) {
     try {
         const result = await runGeneration(question, pending);
         pending.remove();
-        showAssistantAnswer(result.end_output, result.evidence_ledger || [], question, result.session_memory_entry?.sources || null);
+        showAssistantAnswer(result.end_output, result.evidence_ledger || [], question, result.session_memory_entry?.sources || null, pending.replay());
         refreshTitleAfterAnswer(getConversationId());
     } catch (err) {
         console.error(err);
@@ -1404,6 +1415,7 @@ document.getElementById('temporary-chat').addEventListener('click', () => {
     document.getElementById('attach-button').title = 'Attach a temporary file';
     document.getElementById('temporary-chat').setAttribute('aria-pressed', 'true');
     document.getElementById('chat-title').textContent = 'Temporary chat';
+    clearChatThread();
     document.getElementById('chat-thread').innerHTML = emptyStateMarkup(true);
     document.getElementById('delete-conversation').hidden = true;
     document.getElementById('attach-button').disabled = false;
@@ -1436,6 +1448,7 @@ document.getElementById('new-conversation').addEventListener('click', () => {
     document.getElementById('conversation-select').value = '';
     document.querySelectorAll('.conversation-row.active').forEach(row => { row.classList.remove('active'); row.removeAttribute('aria-current'); });
     document.getElementById('question').value = '';
+    clearChatThread();
     document.getElementById('chat-thread').innerHTML = emptyStateMarkup();
     document.getElementById('similarQuestions').style.display = 'none';
     document.getElementById('generate-pdf-button').classList.add('hidden');
@@ -1811,6 +1824,7 @@ document.getElementById('chat-thread').addEventListener('click', event => {
     const table = container.querySelector('.answer-table-view');
     const show = chart.hidden;
     chart.hidden = !show; table.hidden = show;
+    button.closest('.answer-data').querySelectorAll('.ask-chart-point').forEach(el => el.hidden = !show);
     button.textContent = show ? 'View as table' : 'View as chart';
     button.setAttribute('aria-expanded', String(show));
 });
@@ -1839,3 +1853,66 @@ document.getElementById('chat-thread').addEventListener('click', event => {
         try { recognition.start(); } catch { document.querySelector('.hint').textContent = 'Could not start dictation. Type your question instead.'; }
     });
 })();
+
+
+// Replay is built from events seen during this research request only. It is not a persisted audit log.
+function appendResearchReplay(content, events) {
+    const details = document.createElement('details'); details.className = 'research-replay';
+    const summary = document.createElement('summary'); summary.textContent = 'Replay research steps';
+    const note = document.createElement('p'); note.textContent = 'Steps observed in this tab. This is not a record of every source checked.';
+    const list = document.createElement('ol');
+    events.forEach(event => { const li = document.createElement('li'); li.textContent = event; list.append(li); });
+    details.append(summary,note,list); content.append(details);
+}
+
+// Navigation is derived from visible user turns, never sent as extra model context.
+function updateConversationNavigation() {
+    const turns = [...document.querySelectorAll('#chat-thread .chat-message.user')];
+    const nav = document.getElementById('conversation-chapters');
+    const links = document.getElementById('chapter-links'); links.replaceChildren();
+    nav.hidden = turns.length < 3;
+    if (nav.hidden) return;
+    turns.forEach((turn,i) => {
+        const button = document.createElement('button'); button.type = 'button';
+        button.textContent = `${i+1}. ${turn.querySelector('.message-content')?.textContent.trim().slice(0,45) || 'Question'}`;
+        button.title = turn.querySelector('.message-content')?.textContent.trim() || 'Question';
+        button.addEventListener('click', () => turn.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'}));
+        links.append(button);
+    });
+}
+function updateFollowupLens() {
+    const turns = [...document.querySelectorAll('#chat-thread .chat-message.user')];
+    const lens = document.getElementById('followup-lens');
+    lens.hidden = turns.length < 2 || !getConversationId() && !temporaryChat;
+    document.getElementById('followup-context').textContent = turns.length ? `${Math.min(turns.length,8)} recent question${turns.length === 1 ? '' : 's'} may help with a follow-up. This is not an exact source list.` : '';
+}
+document.getElementById('view-context').addEventListener('click', () => {
+    const last = [...document.querySelectorAll('#chat-thread .chat-message.user')].at(-1);
+    last?.scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'});
+});
+const threadForJump = document.getElementById('chat-thread');
+threadForJump.addEventListener('scroll', () => {
+    const jumps = document.querySelector('.thread-jump');
+    const longThread = Boolean(threadForJump.querySelector('.chat-message.user')) && threadForJump.scrollHeight > threadForJump.clientHeight + 100;
+    jumps.hidden = !longThread || threadForJump.scrollTop < 140;
+    document.getElementById('latest-message').hidden = threadForJump.scrollHeight - threadForJump.scrollTop - threadForJump.clientHeight < 80;
+}, {passive:true});
+document.getElementById('previous-message').addEventListener('click', () => {
+    const current = threadForJump.getBoundingClientRect().top;
+    const prior = [...threadForJump.querySelectorAll('.chat-message')].filter(el => el.getBoundingClientRect().top < current - 24).at(-1);
+    (prior || threadForJump.querySelector('.chat-message'))?.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'});
+});
+document.getElementById('latest-message').addEventListener('click', () => { threadForJump.scrollTo({top:threadForJump.scrollHeight,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'}); });
+
+document.getElementById('chat-thread').addEventListener('click', event => {
+    const point = event.target.closest('.ask-chart-point'); if (!point) return;
+    const question = document.getElementById('question');
+    const label = point.dataset.category, measure = point.dataset.measure, value = point.dataset.value;
+    if (!label || !measure || !value) return;
+    const table = point.closest('.answer-data')?.querySelector('table');
+    const rows = table ? [...table.rows].map(row => [...row.cells].map(cell => cell.textContent.trim()).join(' | ')).slice(0,13) : [];
+    if (rows.length < 3) return;
+    const draft = `In this earlier comparison table:\n${rows.join('\n')}\nFor ${label}, ${measure} is ${value}. What explains that value?`;
+    question.value = draft; question.dispatchEvent(new Event('input',{bubbles:true})); question.focus();
+    // The table values travel in the reviewed question, so old turns do not need to be in the context window. No request fires here.
+});
