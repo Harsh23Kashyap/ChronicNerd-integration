@@ -87,7 +87,7 @@
             </aside>
             <div id="sidebar-resizer" class="sidebar-resizer" role="separator" aria-label="Resize conversation sidebar" aria-orientation="vertical" tabindex="0" aria-valuemin="220" aria-valuemax="480" aria-valuenow="250"></div>
             <section class="chat-panel" aria-labelledby="chat-title">
-                <header class="chat-header"><div><span class="status-dot"></span><strong id="chat-title">DietNerd assistant</strong></div><div class="header-actions"><span>Evidence-focused</span><button id="generate-pdf-button" class="hidden header-button">Download answer</button></div></header>
+                <header class="chat-header"><div><span class="status-dot"></span><strong id="chat-title">DietNerd assistant</strong></div><div class="header-actions"><label class="header-profile-toggle"><input type="checkbox" id="use-profile" checked><span>Use my profile</span></label><span>Evidence-focused</span><button id="generate-pdf-button" class="hidden header-button">Download answer</button></div><span id="profile-use-note" class="profile-use-note" role="status">Applies to this conversation only.</span></header>
                 <div id="chat-thread" class="chat-thread" role="log" aria-live="off" aria-relevant="additions">
                     <div class="welcome-message">
                         <span class="assistant-avatar" aria-label="DietNerd"><img src="assets/dietnerd_mark.svg" alt=""></span>
@@ -153,6 +153,8 @@
             <input type="text" id="profile-goals" maxlength="300" placeholder="e.g. lose weight, build muscle, more energy">
             <label for="profile-conditions">Conditions</label>
             <input type="text" id="profile-conditions" maxlength="300" placeholder="e.g. PCOS, prediabetes, none">
+            <label for="profile-additional-notes">Additional notes</label>
+            <textarea id="profile-additional-notes" maxlength="1000" rows="3" placeholder="e.g. height, weight, activity, preferences or anything you want considered"></textarea>
             <p id="profile-error" class="dialog-error" role="alert"></p>
             <p id="profile-success" class="dialog-success" role="status"></p>
             <div class="dialog-actions">

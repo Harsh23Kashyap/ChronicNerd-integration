@@ -60,3 +60,18 @@ html[data-theme=dark] .theme-orb{background:#dce5df;box-shadow:inset -5px -2px 0
 html[data-theme=dark] .feature-demo .mini-mode,html[data-theme=dark] .feature-demo .mini-label{color:#a9c3b3}html[data-theme=dark] .feature-demo .mini-chart span{color:#eaf3ec}html[data-theme=dark] .feature-demo .mini-table{color:#173f35}html[data-theme=dark] .feature-demo .mini-answer,html[data-theme=dark] .feature-demo .export-demo p{color:#173f35}html[data-theme=dark] .feature-demo .mini-sidebar{color:#dce5df}html[data-theme=dark] .feature-demo .mini-source{color:#173f35}html[data-theme=dark] .feature-demo .mini-chip{color:#173f35}html[data-theme=dark] .feature-demo .mini-actions>span{color:#dce5df}html[data-theme=dark] .feature-demo .followup-demo small{color:#dce5df}
 
 html[data-theme=dark] .feature-demo .mini-field strong,html[data-theme=dark] .feature-demo .mini-field{color:#173f35}html[data-theme=dark] .feature-demo .mini-question{color:#fff}html[data-theme=dark] .feature-demo .mini-compose{color:#173f35}html[data-theme=dark] .feature-demo .export-demo p{color:#173f35}html[data-theme=dark] .brand img{filter:brightness(0) saturate(100%) invert(72%) sepia(14%) saturate(680%) hue-rotate(98deg)}
+
+/* SVG sketches draw in once as each feature enters view. The previews themselves remain usable without motion. */
+.feature-illustration{display:block;width:100%;height:62px;margin:-4px 0 12px;overflow:visible;fill:none;stroke:#255b4d;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.feature-illustration .svg-detail{stroke:#719281;stroke-width:1.5}.feature-illustration .svg-node{fill:#f2f5eb;stroke:#255b4d;stroke-width:2}
+.feature-illustration .draw-path{stroke-dasharray:var(--path-length,760);stroke-dashoffset:0}.feature-illustration .svg-detail{opacity:1}
+.feature-illustration .svg-node{transform-origin:center;transform-box:fill-box}
+.feature-card.feature-in-view .feature-illustration .draw-path{animation:featureDraw .7s cubic-bezier(.2,.7,.2,1) both}
+.feature-card.feature-in-view .feature-illustration .draw-later{animation-delay:.24s}
+.feature-card.feature-in-view .feature-illustration .svg-detail{animation:featureDetail .5s ease-out .5s both}
+.feature-card.feature-in-view .feature-illustration .svg-node-delayed{animation:featureNode .45s ease-out .42s both}
+@keyframes featureDraw{from{stroke-dashoffset:var(--path-length,760)}to{stroke-dashoffset:0}}
+@keyframes featureDetail{from{opacity:0}to{opacity:1}}
+@keyframes featureNode{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+html[data-theme=dark] .feature-illustration{stroke:#9fd1ba}html[data-theme=dark] .feature-illustration .svg-detail{stroke:#85ae99}html[data-theme=dark] .feature-illustration .svg-node{fill:#26372c;stroke:#9fd1ba}
+@media(prefers-reduced-motion:reduce){.feature-card.feature-in-view .feature-illustration .draw-path,.feature-card.feature-in-view .feature-illustration .svg-detail,.feature-card.feature-in-view .feature-illustration .svg-node-delayed{animation:none}}

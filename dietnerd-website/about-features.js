@@ -1,5 +1,16 @@
 // Small, isolated About-page previews. They do not access account data or the live chat.
 (() => {
+    const cards = document.querySelectorAll('.feature-card');
+    // Each path has its own length, so even a short chart axis draws smoothly.
+    cards.forEach(card => card.querySelectorAll('.feature-illustration .draw-path').forEach(path => {
+        if (typeof path.getTotalLength === 'function') path.style.setProperty('--path-length', String(Math.ceil(path.getTotalLength()) + 2));
+    }));
+    if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        const observer = new IntersectionObserver(entries => entries.forEach(entry => {
+            if (entry.isIntersecting) { entry.target.classList.add('feature-in-view'); observer.unobserve(entry.target); }
+        }), {threshold:.35});
+        cards.forEach(card => observer.observe(card));
+    }
     const temporary = document.querySelector('.mini-temp-toggle');
     temporary?.addEventListener('click', () => {
         const active = temporary.getAttribute('aria-pressed') !== 'true';

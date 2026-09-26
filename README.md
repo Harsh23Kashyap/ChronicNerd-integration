@@ -2,15 +2,28 @@
 
 ChronicNerd is a conversational diet and nutrition research app in the CustomNerd family. The current web UI and assistant are branded **DietNerd**. It helps a signed-in user explore published research, inspect linked sources, and continue questions within saved conversations. It is an exploratory tool, not a medical diagnosis or a substitute for a dietitian.
 
-## What is in this repo
+## What you can do
 
-- A FastAPI research API (`dietnerd-backend/`) that searches and processes scientific literature, builds answers, and exposes progress through server-sent events (SSE).
-- A responsive, browser-based chat (`dietnerd-website/`) with conversation history, follow-up context, attachment uploads, an in-chat source list and source drawer, a download-answer control, and related saved-question suggestions.
-- MySQL-backed user accounts and conversations. Passwords use bcrypt; session tokens are stored as digests in a database table and sent to browsers in HttpOnly cookies. Changing a password revokes other sessions.
-- Optional research controls: claim-source ledger and a browser-local answer notebook. These are opt-in display/storage features, not scientific validation. A retrieved source or matched citation does **not** prove an answer's claim.
-- Local Docker Compose and automated API/browser tests. The frontend is plain HTML, CSS and JavaScript.
+Ask a nutrition question and watch the research journey as the server finds and checks papers. The live tracker shows stages and retrieved paper titles, not a claim that any title proves the answer. You can open article analysis and original source links when a citation can be resolved. A saved conversation keeps its turns together so you can ask follow-ups; titles can be searched or renamed, and you can jump between previous and latest messages or browse chapters and replay the stages seen during a request.
 
-The research pipeline can take time. The chat shows stages and retrieved article titles while work is running; these titles are search context, not verified claim support. SSE reconnects can replay bounded progress from the same running API process, but a process restart can interrupt an in-flight request. Saved conversation turns remain in MySQL.
+You can dictate a question in a browser that supports speech input, then review it before sending. Answers can be copied, and conversations can be downloaded as readable PDFs. Numeric tables may be viewed as charts while the underlying table stays available; chart values can seed a follow-up question. The About page has an illustrated Features gallery, and the site has a light/dark sun-and-moon switch with reduced-motion behavior.
+
+The diet profile is optional. A saved conversation can choose whether to use it; temporary chat does not use the saved profile, keeps only bounded turns in the current tab, and does not add those turns to history. A profile may contain an age range, goals, conditions and additional notes such as activity or measurements. Those are self-reported context, not a diagnosis or a source of research evidence. A generic cached answer must not replace personalized research.
+
+Related saved-question suggestions, attachment research (including a selected paper), claim-source inspection and reference analysis remain available. An article title, citation match or generated claim is not independently verified support. PDF and article links should be checked against the paper when a decision matters.
+
+### Answer depth
+
+The current conversational answer is the light path. A separate heavy mode intended to use the original DietNerdV2 pipeline is **not yet wired or deployed**. That upstream repository is access-restricted in this workspace, so we cannot describe its exact pipeline or promise that its long-form answer, article analysis and safety review are reproduced here. Do not label the current light pipeline "DietNerdV2 heavy" merely because it retrieves many titles. Once the original code is available, the heavy path needs its own review and tests for article search, source count and quality, similar-question suggestions, PDF output, reference analysis with full-article links, and safety treatment of pros, cons and risks.
+
+## Implementation
+
+- FastAPI research API (`dietnerd-backend/`) searches and processes literature, builds answers and streams progress over server-sent events (SSE).
+- Responsive HTML, CSS and JavaScript chat (`dietnerd-website/`) with conversation history, source UI, article analysis, profile controls, and the public Features page.
+- MySQL-backed accounts and saved conversations. Passwords use bcrypt; session tokens are stored as digests and sent in HttpOnly cookies. Changing a password revokes other sessions.
+- Docker Compose and API/browser tests. Research checks that stub external science APIs do not prove a live PubMed or model answer.
+
+A research request can take time. SSE can reconnect to the same running API process, but a process restart may interrupt an in-flight request. Saved turns remain in MySQL. The last eight turns help interpret follow-up intent; prior answers are not scientific evidence.
 
 ## Project layout
 

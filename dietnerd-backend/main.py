@@ -84,6 +84,7 @@ def create_tables():
                 title VARCHAR(255),
                 next_query_number INT NOT NULL DEFAULT 1,
                 title_locked TINYINT(1) NOT NULL DEFAULT 0,
+                use_profile TINYINT(1) NOT NULL DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX idx_conversations_email (email),
@@ -107,6 +108,9 @@ def create_tables():
                 FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id) ON DELETE CASCADE
             )
         """)
+        cursor.execute("SHOW COLUMNS FROM conversations LIKE 'use_profile'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE conversations ADD COLUMN use_profile TINYINT(1) NOT NULL DEFAULT 1")
         cursor.execute("SHOW COLUMNS FROM user_session_memory LIKE 'sources_json'")
         if not cursor.fetchone():
             cursor.execute("ALTER TABLE user_session_memory ADD COLUMN sources_json LONGTEXT")
@@ -149,10 +153,14 @@ def create_tables():
                 age_range VARCHAR(40) NOT NULL DEFAULT '',
                 goals VARCHAR(300) NOT NULL DEFAULT '',
                 conditions VARCHAR(300) NOT NULL DEFAULT '',
+                additional_notes TEXT,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 FOREIGN KEY (email) REFERENCES users(email) ON DELETE CASCADE
             )
         """)
+        cursor.execute("SHOW COLUMNS FROM user_profiles LIKE 'additional_notes'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE user_profiles ADD COLUMN additional_notes TEXT")
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS password_resets (
                 token_hash CHAR(64) PRIMARY KEY,
@@ -194,6 +202,7 @@ class QueryModel(BaseModel):
     email: Optional[str] = None
     conversation_id: Optional[str] = None
     temporary: bool = False
+    use_profile: bool = True
     temporary_history: Optional[List[Dict[str, str]]] = None
     attachment_filename: Optional[str] = None
     attachment_base64: Optional[str] = None
@@ -458,8 +467,16 @@ async def sim_search(question:str, email: str = Depends(current_user)):
 async def cached_answer(query: QueryModel, email: str = Depends(current_user)):
     query.email = email
     conversation_id = query.conversation_id
+    if query.temporary:
+        raise HTTPException(status_code=400, detail="Temporary chats cannot use saved answers.")
     if conversation_id and not conversation_belongs_to(query.email, conversation_id):
         raise HTTPException(status_code=404, detail="Conversation not found.")
+
+    # Generic cached answers do not carry account profile context. A cache hit
+    # must never stand in for a personalized response, regardless of client UI.
+    use_profile = conversation_uses_profile(email, conversation_id) if conversation_id else query.use_profile
+    if use_profile and get_diet_profile_prompt(email):
+        raise HTTPException(status_code=409, detail="A personalized answer needs fresh research.")
 
     # Cache lookup uses the literal question. Context rewriting belongs only to
     # the generation path, so a cache miss cannot invoke the rewrite model twice.
@@ -469,7 +486,7 @@ async def cached_answer(query: QueryModel, email: str = Depends(current_user)):
         raise HTTPException(status_code=404, detail="Cached answer not found.")
 
     if not conversation_id:
-        conversation_id = create_conversation(query.email, query.user_query[:120])
+        conversation_id = create_conversation(query.email, query.user_query[:120], query.use_profile)
     request_id = str(uuid.uuid4())
     cached_payload = result[0][1]
     try:
@@ -519,14 +536,14 @@ async def check_valid(question:str, email: str = Depends(current_user)):
 async def check_valid_private(query: QueryModel, email: str = Depends(current_user)):
     return await check_valid(query.user_query, email)
 
-def create_conversation(email: str, title: Optional[str] = None) -> str:
+def create_conversation(email: str, title: Optional[str] = None, use_profile: bool = True) -> str:
     conversation_id = str(uuid.uuid4())
     connection = _get_db_connection()
     try:
         cursor = connection.cursor()
         cursor.execute(
-            "INSERT INTO conversations (conversation_id, email, title) VALUES (%s, %s, %s)",
-            (conversation_id, email, title),
+            "INSERT INTO conversations (conversation_id, email, title, use_profile) VALUES (%s, %s, %s, %s)",
+            (conversation_id, email, title, int(use_profile)),
         )
         connection.commit()
     finally:
@@ -542,6 +559,18 @@ def conversation_belongs_to(email: str, conversation_id: str) -> bool:
             (conversation_id, email),
         )
         return cursor.fetchone() is not None
+    finally:
+        connection.close()
+
+def conversation_uses_profile(email: str, conversation_id: str) -> bool:
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT use_profile FROM conversations WHERE conversation_id = %s AND email = %s", (conversation_id, email))
+        row = cursor.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Conversation not found.")
+        return bool(row[0])
     finally:
         connection.close()
 
@@ -651,6 +680,9 @@ async def read_paper_context(pmid: str, email: str = Depends(current_user)):
 async def new_conversation(email: str = Depends(current_user)):
     return {"conversation_id": create_conversation(email)}
 
+class ConversationProfileModel(BaseModel):
+    use_profile: bool
+
 class RenameModel(BaseModel):
     title: str
 
@@ -673,12 +705,28 @@ async def rename_conversation(conversation_id: str, body: RenameModel, email: st
         connection.close()
     return {"conversation_id": conversation_id, "title": title}
 
+@app.put("/conversations/{conversation_id}/profile")
+async def set_conversation_profile(conversation_id: str, body: ConversationProfileModel, email: str = Depends(current_user)):
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("UPDATE conversations SET use_profile = %s WHERE conversation_id = %s AND email = %s",
+                       (int(body.use_profile), conversation_id, email))
+        if cursor.rowcount == 0:
+            cursor.execute("SELECT 1 FROM conversations WHERE conversation_id = %s AND email = %s", (conversation_id, email))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=404, detail="Conversation not found.")
+        connection.commit()
+    finally:
+        connection.close()
+    return {"conversation_id": conversation_id, "use_profile": body.use_profile}
+
 @app.get("/conversations")
 async def list_conversations(email: str = Depends(current_user)):
     connection = _get_db_connection()
     try:
         cursor = connection.cursor(dictionary=True)
-        cursor.execute("SELECT conversation_id, title, created_at, updated_at FROM conversations WHERE email = %s ORDER BY updated_at DESC", (email,))
+        cursor.execute("SELECT conversation_id, title, use_profile, created_at, updated_at FROM conversations WHERE email = %s ORDER BY updated_at DESC", (email,))
         return {"conversations": cursor.fetchall()}
     finally:
         connection.close()
@@ -776,18 +824,19 @@ class ProfileModel(BaseModel):
     age_range: Optional[str] = None
     goals: Optional[str] = None
     conditions: Optional[str] = None
+    additional_notes: Optional[str] = None
 
 def read_diet_profile(email):
     connection = _get_db_connection()
     try:
         cursor = connection.cursor()
-        cursor.execute("SELECT age_range, goals, conditions FROM user_profiles WHERE email = %s", (email,))
+        cursor.execute("SELECT age_range, goals, conditions, additional_notes FROM user_profiles WHERE email = %s", (email,))
         row = cursor.fetchone()
     finally:
         connection.close()
     if not row:
         return None
-    return {"age_range": row[0] or "", "goals": row[1] or "", "conditions": row[2] or ""}
+    return {"age_range": row[0] or "", "goals": row[1] or "", "conditions": row[2] or "", "additional_notes": row[3] or ""}
 
 def get_diet_profile_prompt(email):
     try:
@@ -803,7 +852,9 @@ def get_diet_profile_prompt(email):
     if profile["goals"]:
         parts.append(f"goals: {profile['goals']}")
     if profile["conditions"]:
-        parts.append(f"conditions: {profile['conditions']}")
+        parts.append(f"conditions or other details: {profile['conditions']}")
+    if profile.get("additional_notes"):
+        parts.append(f"additional notes: {profile['additional_notes']}")
     if not parts:
         return ""
     return ("The person asking self-reported the following: " + "; ".join(parts) +
@@ -813,27 +864,28 @@ def get_diet_profile_prompt(email):
 async def get_profile(email: str = Depends(current_user)):
     profile = read_diet_profile(email) or {}
     return {"age_range": profile.get("age_range") or "", "goals": profile.get("goals") or "",
-            "conditions": profile.get("conditions") or ""}
+            "conditions": profile.get("conditions") or "", "additional_notes": profile.get("additional_notes") or ""}
 
 @app.put("/profile")
 async def put_profile(profile: ProfileModel, email: str = Depends(current_user)):
     age_range = (profile.age_range or "").strip()
     goals = (profile.goals or "").strip()
     conditions = (profile.conditions or "").strip()
+    additional_notes = (profile.additional_notes or "").strip()
     if age_range and age_range not in ALLOWED_AGE_RANGES:
         raise HTTPException(status_code=400, detail="Choose an age range from the list.")
-    if len(goals) > 300 or len(conditions) > 300 or len(age_range) > 40:
+    if len(goals) > 300 or len(conditions) > 300 or len(age_range) > 40 or len(additional_notes) > 1000:
         raise HTTPException(status_code=400, detail="Profile fields are too long.")
     connection = _get_db_connection()
     try:
         cursor = connection.cursor()
-        if not age_range and not goals and not conditions:
+        if not age_range and not goals and not conditions and not additional_notes:
             cursor.execute("DELETE FROM user_profiles WHERE email = %s", (email,))
         else:
             cursor.execute(
-                "INSERT INTO user_profiles (email, age_range, goals, conditions) VALUES (%s, %s, %s, %s) "
-                "ON DUPLICATE KEY UPDATE age_range = VALUES(age_range), goals = VALUES(goals), conditions = VALUES(conditions)",
-                (email, age_range, goals, conditions),
+                "INSERT INTO user_profiles (email, age_range, goals, conditions, additional_notes) VALUES (%s, %s, %s, %s, %s) "
+                "ON DUPLICATE KEY UPDATE age_range = VALUES(age_range), goals = VALUES(goals), conditions = VALUES(conditions), additional_notes = VALUES(additional_notes)",
+                (email, age_range, goals, conditions, additional_notes),
             )
         connection.commit()
     finally:
@@ -965,7 +1017,7 @@ async def _start_query(background_tasks, query, email, temporary_attachment_cont
         request_owners[request_id] = email
     if not conversation_id and not query.temporary:
         try:
-            conversation_id = create_conversation(query.email, query.user_query[:120])
+            conversation_id = create_conversation(query.email, query.user_query[:120], query.use_profile)
         except Exception:
             with request_event_lock:
                 request_events.pop(request_id, None)
@@ -974,7 +1026,9 @@ async def _start_query(background_tasks, query, email, temporary_attachment_cont
                 request_created_at.pop(request_id, None)
                 request_owners.pop(request_id, None)
             raise
-    background_tasks.add_task(_run_research_with_key, query.user_query, request_id, query.email, conversation_id, temporary_history, temporary_attachment_context, paper_context)
+    # New conversation choice is supplied with creation; existing chats use the stored setting.
+    use_profile = False if query.temporary else (query.use_profile if query.conversation_id is None else conversation_uses_profile(query.email, conversation_id))
+    background_tasks.add_task(_run_research_with_key, query.user_query, request_id, query.email, conversation_id, temporary_history, temporary_attachment_context, paper_context, use_profile)
     return JSONResponse({"request_id": request_id, "conversation_id": conversation_id})
 
 def _prune_request_events():
@@ -1052,9 +1106,9 @@ def get_user_documents(email: str):
     finally:
         connection.close()
 
-def _run_research_with_key(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None, paper_context=None):
+def _run_research_with_key(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None, paper_context=None, use_profile=True):
     try:
-        result = process_user_query(user_query, request_id, email, conversation_id, temporary_history, temporary_attachment_context, paper_context)
+        result = process_user_query(user_query, request_id, email, conversation_id, temporary_history, temporary_attachment_context, paper_context, use_profile)
         if conversation_id:
             logging.info("Conversation title job queued")
             scope_context = copy_context()
@@ -1151,7 +1205,7 @@ def _send_article_titles(request_id: str, articles: list, stage: str):
         }))
 
 
-def process_user_query(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None, paper_context=None):
+def process_user_query(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None, paper_context=None, use_profile=True):
     session_memory = get_session_memory(email, conversation_id) if conversation_id else (temporary_history or [])
     raw_question = user_query
 
@@ -1179,9 +1233,10 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
         user_attachment_context = f"{user_attachment_context}\n\n{paper_text}" if user_attachment_context else paper_text
         attachment_exist = True
 
-    profile_prompt = get_diet_profile_prompt(email)
-    if profile_prompt and user_attachment_context:
-        user_attachment_context += f"\n\nPersonalization context: {profile_prompt}"
+    # Temporary requests have no saved conversation, and must never read account profile.
+    profile_prompt = get_diet_profile_prompt(email) if conversation_id and use_profile else ""
+    # Keep self-reported profile separate from document evidence. It is context,
+    # not a retrieved paper, and must never turn a file answer into a clinical claim.
 
     attachment_partial_answer = None
     partial_question = None
@@ -1270,7 +1325,7 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
 
     # Final Output
     start_output = time.time()
-    final_output = generate_final_response(all_relevant_articles, pipeline_query, profile_prompt or None, original_articles=relevant_articles, recent_history=session_memory[-8:])
+    final_output = generate_final_response(all_relevant_articles, pipeline_query, user_attachment_context, original_articles=relevant_articles, recent_history=session_memory[-8:], profile_context=profile_prompt or None)
     if attachment_partial_answer:
         final_output = attachment_partial_answer + "\n\n" + final_output
     end_output = time.time()

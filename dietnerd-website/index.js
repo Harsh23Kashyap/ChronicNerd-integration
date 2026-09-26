@@ -3,6 +3,7 @@ const baseURL = DietNerdAPI.baseURL;
 const apiFetch = DietNerdAPI.apiFetch;
 
 let temporaryChat = false;
+const conversationProfileSettings = new Map();
 let temporaryTurns = [];
 let temporaryFile = null;
 function getConversationId() {
@@ -262,6 +263,9 @@ async function refreshConversationList() {
         return;
     }
     const data = await response.json();
+    conversationProfileSettings.clear();
+    (data.conversations || []).forEach(c => conversationProfileSettings.set(c.conversation_id, c.use_profile !== false && c.use_profile !== 0));
+    if (!temporaryChat && currentId && conversationProfileSettings.has(currentId)) setProfileUseUI(conversationProfileSettings.get(currentId));
     document.querySelector('.sidebar-heading span').textContent = `Conversations (${(data.conversations || []).length})`;
     select.innerHTML = '<option value="">New conversation</option>';
     const list = document.getElementById('conversation-list');
@@ -407,6 +411,7 @@ const getAnswer = async (question) => {
             body: JSON.stringify({
                 user_query: question,
                 conversation_id: getConversationId(),
+                use_profile: document.getElementById('use-profile').checked,
             }),
         });
         if (!response.ok) {
@@ -1110,6 +1115,7 @@ let selectedSuggestion = false;
 function setComposerBusy(busy) {
     questionInFlight = busy;
     document.getElementById('submit').disabled = busy;
+    document.getElementById('use-profile').disabled = busy || temporaryChat;
     document.getElementById('question').setAttribute('aria-busy', busy ? 'true' : 'false');
 }
 
@@ -1117,7 +1123,7 @@ async function runGeneration(userQuery, pending) {
     const isTemporary = temporaryChat;
     const paperFile = paperContext?.file || null;
     const file = paperFile || (isTemporary ? temporaryFile : null);
-    const payload = { user_query: userQuery, conversation_id: getConversationId(), temporary: isTemporary, temporary_history: isTemporary ? temporaryTurns.slice(-8) : [] };
+    const payload = { user_query: userQuery, conversation_id: getConversationId(), temporary: isTemporary, use_profile: !isTemporary && document.getElementById('use-profile').checked, temporary_history: isTemporary ? temporaryTurns.slice(-8) : [] };
     if (paperContext?.pmid) payload.paper_pmid = paperContext.pmid;
     if (file) {
         const bytes = new Uint8Array(await file.arrayBuffer());
@@ -1316,14 +1322,18 @@ document.getElementById('submit').addEventListener('click', async () => {
         return;
     }
 
-    if (temporaryChat) { await generateAnswer(question); return; }
+    if (temporaryChat || document.getElementById('use-profile').checked) {
+        // Generic cache and similar saved answers cannot include this account's profile.
+        await generateAnswer(question);
+        return;
+    }
 
     setComposerBusy(true);
     const initialStatus = appendPendingMessage();
     initialStatus.setStatus('Checking for a saved answer...');
     let cachedAnswer = null;
     try {
-        cachedAnswer = await getAnswer(question);
+        if (!useSelectedSuggestion && !conversationHasTurns()) cachedAnswer = await getAnswer(question);
     } catch (err) {
         cachedAnswer = null;
     } finally {
@@ -1398,6 +1408,7 @@ document.getElementById('conversation-select').addEventListener('change', async 
     document.getElementById('attachment-label').textContent = attachmentExists ? '' : 'No file attached';
     document.getElementById('chat-title').textContent = 'DietNerd assistant';
     sessionStorage.setItem('dietnerd_conversation_id', conversationId);
+    setProfileUseUI(conversationProfileSettings.get(conversationId) !== false);
     await renderSelectedConversation(conversationId);
     document.querySelectorAll('.conversation-row').forEach(row => {
         const active = row.dataset.conversationId === conversationId;
@@ -1413,6 +1424,7 @@ document.getElementById('temporary-chat').addEventListener('click', () => {
     temporaryChat = true;
     clearPaperScope();
     document.body.classList.add('temporary-mode');
+    setProfileUseUI(false, true);
     temporaryTurns = [];
     temporaryFile = null;
     document.getElementById('attachment-file').value = '';
@@ -1437,6 +1449,7 @@ document.getElementById('new-conversation').addEventListener('click', () => {
     temporaryChat = false;
     clearPaperScope();
     document.body.classList.remove('temporary-mode');
+    setProfileUseUI(true);
     temporaryTurns = [];
     temporaryFile = null;
     document.getElementById('attachment-file').value = '';
@@ -1734,6 +1747,7 @@ let paperContext = null;
     dialog.addEventListener('close', closeAge);
     const goals = document.getElementById('profile-goals');
     const conditions = document.getElementById('profile-conditions');
+    const notes = document.getElementById('profile-additional-notes');
     const error = document.getElementById('profile-error');
     const success = document.getElementById('profile-success');
     async function loadProfile() {
@@ -1745,6 +1759,7 @@ let paperContext = null;
             setAge(profile.age_range || '');
             goals.value = profile.goals || '';
             conditions.value = profile.conditions || '';
+            notes.value = profile.additional_notes || '';
         } catch (err) { error.textContent = err.message; }
     }
     async function saveProfile(payload, doneMessage) {
@@ -1765,15 +1780,43 @@ let paperContext = null;
     });
     document.getElementById('profile-cancel').addEventListener('click', () => dialog.close());
     document.getElementById('profile-clear').addEventListener('click', async () => {
-        if (await saveProfile({age_range: '', goals: '', conditions: ''}, 'Profile cleared.')) {
-            setAge(''); goals.value = ''; conditions.value = '';
+        if (await saveProfile({age_range: '', goals: '', conditions: '', additional_notes: ''}, 'Profile cleared.')) {
+            setAge(''); goals.value = ''; conditions.value = ''; notes.value = '';
         }
     });
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
-        await saveProfile({age_range: age.value, goals: goals.value.trim(), conditions: conditions.value.trim()}, 'Profile saved.');
+        await saveProfile({age_range: age.value, goals: goals.value.trim(), conditions: conditions.value.trim(), additional_notes: notes.value.trim()}, 'Profile saved.');
     });
 })();
+
+function setProfileUseUI(enabled, temporary = false) {
+    const toggle = document.getElementById('use-profile');
+    toggle.checked = !temporary && enabled;
+    toggle.disabled = temporary || questionInFlight;
+    document.getElementById('profile-use-note').textContent = temporary
+        ? 'Temporary chats never use your profile.'
+        : 'Applies to this conversation only.';
+}
+document.getElementById('use-profile').addEventListener('change', async event => {
+    const toggle = event.target;
+    const conversationId = getConversationId();
+    if (temporaryChat || questionInFlight) { setProfileUseUI(false, temporaryChat); return; }
+    if (!conversationId) return; // New conversation setting is sent with its first query.
+    const selected = toggle.checked;
+    toggle.disabled = true;
+    try {
+        const response = await apiFetch(`/conversations/${encodeURIComponent(conversationId)}/profile`, {
+            method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({use_profile: selected}),
+        });
+        if (!response.ok) throw new Error(await DietNerdAPI.readError(response, 'Could not update profile setting.'));
+        conversationProfileSettings.set(conversationId, selected);
+        document.getElementById('profile-use-note').textContent = selected ? 'Profile on for this conversation.' : 'Profile off for this conversation.';
+    } catch (error) {
+        toggle.checked = !selected;
+        document.getElementById('profile-use-note').textContent = error.message || 'Could not update profile setting.';
+    } finally { toggle.disabled = false; }
+});
 
 // Rename a saved conversation inline.
 function beginRename(item, conversation) {

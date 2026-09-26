@@ -576,3 +576,61 @@ html[data-theme=dark] .research-replay,html[data-theme=dark] .chat-message.assis
 #chapter-links button[aria-current=true]{border-color:var(--forest-2);box-shadow:inset 0 -2px 0 var(--forest-2)}
 .thread-jump:not([hidden]){animation:quietReveal .16s ease-out both}@keyframes quietReveal{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.in-chat-source.source-flash,.message-content>p.source-flash,.thread-jump:not([hidden]){animation:none}}
+
+/* Temporary mode colors the whole app shell, including history and mobile chrome. */
+body.temporary-mode .chat-sidebar{background:#f0ddbc;border-color:#d8b991}
+body.temporary-mode .chat-sidebar .sidebar-heading{color:#70492f}
+body.temporary-mode .chat-sidebar .sidebar-heading .temporary-chat-button[aria-pressed=true]{background:#875b36;border-color:#875b36;color:#fffaf0}
+body.temporary-mode .chat-sidebar :is(.history-toggle,select,.conversation-row){color:#70492f;border-color:#d8b991}
+body.temporary-mode .chat-sidebar :is(.history-toggle,select){background:#f9ecd5}
+body.temporary-mode .chat-sidebar .conversation-row:hover,body.temporary-mode .chat-sidebar .conversation-row.active{background:#e8cda2;color:#4d301e}
+body.temporary-mode .toolbar{background:#f0ddbc;border-bottom-color:#d8b991}
+@media(max-width:800px){body.temporary-mode.conversation-mode .toolbar{background:#f0ddbc;border-bottom-color:#d8b991}}
+html[data-theme=dark] body.temporary-mode .chat-sidebar{background:#392d23;border-color:#67513d}
+html[data-theme=dark] body.temporary-mode .chat-sidebar .sidebar-heading{color:#f0c899}
+html[data-theme=dark] body.temporary-mode .chat-sidebar :is(.history-toggle,select,.conversation-row){color:#f7d8ae;border-color:#8c694a}
+html[data-theme=dark] body.temporary-mode .chat-sidebar :is(.history-toggle,select){background:#49392b!important}
+html[data-theme=dark] body.temporary-mode .chat-sidebar .conversation-row:hover,html[data-theme=dark] body.temporary-mode .chat-sidebar .conversation-row.active{background:#654831;color:#fff0d6}
+html[data-theme=dark] body.temporary-mode .toolbar{background:#392d23;border-bottom-color:#67513d}
+@media(max-width:800px){html[data-theme=dark] body.temporary-mode.conversation-mode .toolbar{background:#392d23;border-bottom-color:#67513d}}
+body.temporary-mode .chat-sidebar :is(.history-search,.rename-input){background:#fff5e5;border-color:#d8b991;color:#4d301e}
+body.temporary-mode .chat-sidebar .sidebar-note{border-color:#d8b991}
+body.temporary-mode .chat-sidebar .sidebar-note :is(strong,span),body.temporary-mode .chat-sidebar .sidebar-options,body.temporary-mode .chat-sidebar .sidebar-options label{color:#70492f}
+body.temporary-mode .chat-sidebar .icon-button{background:#875b36;color:#fffaf0}
+body.temporary-mode .chat-sidebar .history-results,body.temporary-mode .chat-sidebar .conversation-list{background:#f0ddbc;border-color:#d8b991}
+@media(max-width:800px){body.temporary-mode.conversation-mode .chat-shell>.chat-sidebar .history-results{background:#f0ddbc;border-color:#d8b991}}
+html[data-theme=dark] body.temporary-mode .chat-sidebar :is(.history-search,.rename-input){background:#49392b;border-color:#8c694a;color:#fff0d6}
+html[data-theme=dark] body.temporary-mode .chat-sidebar .sidebar-note{border-color:#67513d}
+html[data-theme=dark] body.temporary-mode .chat-sidebar .sidebar-note :is(strong,span),html[data-theme=dark] body.temporary-mode .chat-sidebar .sidebar-options,html[data-theme=dark] body.temporary-mode .chat-sidebar .sidebar-options label{color:#e9cba5}
+html[data-theme=dark] body.temporary-mode .chat-sidebar .icon-button{background:#805737;color:#fff7ed}
+html[data-theme=dark] body.temporary-mode .chat-sidebar .history-results,html[data-theme=dark] body.temporary-mode .chat-sidebar .conversation-list{background:#392d23;border-color:#67513d}
+@media(max-width:800px){html[data-theme=dark] body.temporary-mode.conversation-mode .chat-shell>.chat-sidebar .history-results{background:#392d23;border-color:#67513d}}
+/* The per-conversation profile control stays visible in the chat header on mobile. */
+.chat-header .header-profile-toggle{display:inline-flex;align-items:center;gap:5px;font:600 11px "DM Sans",sans-serif;color:var(--forest);cursor:pointer;white-space:nowrap}
+.chat-header .header-profile-toggle input{accent-color:#255b4d;width:15px;height:15px;margin:0;cursor:pointer}
+.chat-header .header-profile-toggle input:disabled{cursor:not-allowed}
+.chat-panel>.profile-use-note{position:absolute;right:18px;top:63px;z-index:1;padding:3px 7px;border-radius:0 0 7px 7px;background:#eaf1eb;color:#456758;font:500 10px "DM Sans",sans-serif}
+body.temporary-mode .chat-header .header-profile-toggle{color:#70492f}
+body.temporary-mode .chat-panel>.profile-use-note{background:#f0dcb4;color:#70492f}
+html[data-theme=dark] .chat-header .header-profile-toggle{color:#dce5df}
+html[data-theme=dark] .chat-panel>.profile-use-note{background:#29372e;color:#acbeb1}
+html[data-theme=dark] body.temporary-mode .chat-header .header-profile-toggle{color:#f7d8ae}
+html[data-theme=dark] body.temporary-mode .chat-panel>.profile-use-note{background:#493628;color:#f7d8ae}
+@media(max-width:800px){.chat-header .header-profile-toggle{font-size:10px}.chat-panel>.profile-use-note{top:62px;right:10px;font-size:9px}}
+/* A completed connector draws only after an SSE stage update marks it complete. */
+.research-journey .research-steps li.complete:not(:last-child)::after{background:#c9d8cb}
+.research-journey .research-steps li.complete:not(:last-child)::before{content:"";position:absolute;top:6px;left:16px;right:2px;height:2px;background:var(--forest-2);transform:scaleX(1);transform-origin:left center;animation:journeyLineDraw .65s ease-out both}
+@keyframes journeyLineDraw{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+html[data-theme=dark] .research-journey .research-steps li.complete:not(:last-child)::before{background:var(--forest-2)}
+@media(max-width:600px){.research-journey .research-steps li.complete:not(:last-child)::before{left:6px;right:auto;top:17px;bottom:-3px;width:2px;height:auto;transform-origin:center top;animation:journeyLineDrawMobile .65s ease-out both}@keyframes journeyLineDrawMobile{from{transform:scaleY(0)}to{transform:scaleY(1)}}}
+@media(prefers-reduced-motion:reduce){.research-journey .research-steps li.complete:not(:last-child)::before{animation:none;transform:none}}
+
+/* Keep the short explanation below the header, never squeezed into its row. */
+.chat-header{position:relative}
+.chat-panel>.chat-header .profile-use-note{position:absolute;top:100%;right:12px;z-index:2;max-width:220px;padding:3px 7px;border-radius:0 0 7px 7px;background:#eaf1eb;color:#456758;font:500 10px/1.25 "DM Sans",sans-serif;text-align:right}
+body.temporary-mode .chat-header .profile-use-note{background:#f0dcb4;color:#70492f}
+html[data-theme=dark] .chat-header .profile-use-note{background:#29372e;color:#acbeb1}
+html[data-theme=dark] body.temporary-mode .chat-header .profile-use-note{background:#493628;color:#f7d8ae}
+@media(max-width:800px){.chat-panel>.chat-header .profile-use-note{right:9px;max-width:190px;font-size:9px}}
+#profile-additional-notes{width:100%;min-height:74px;resize:vertical;border:1px solid var(--line);border-radius:9px;padding:10px;font:500 12px/1.5 "DM Sans",sans-serif;color:var(--ink);background:var(--paper)}
+html[data-theme=dark] #profile-additional-notes{background:#29372e;color:#eaf3ec;border-color:#58705e}
