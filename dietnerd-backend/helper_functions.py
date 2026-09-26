@@ -1643,7 +1643,7 @@ def enforce_three_part_answer(answer: str) -> str:
           "What to ask a dietitian\nWhich studies directly address this question for me?")
 
 
-def generate_final_response(all_relevant_articles, query, attachment_text=None, original_articles=None, recent_history=None, profile_context=None):
+def generate_final_response(all_relevant_articles, query, attachment_text=None, original_articles=None, recent_history=None, profile_context=None, answer_mode="light"):
   """
   Generate the final response to the user question based on the strongest level of evidence in the provided article summaries.
 
@@ -1685,6 +1685,20 @@ def generate_final_response(all_relevant_articles, query, attachment_text=None, 
 
       Use exactly these three visible headings: What we know; What we don't know; What to ask a dietitian. For each finding, cite the adjacent directly relevant source and make the study population and outcome clear. Under What we don't know, explicitly name indirect, missing, conflicting, or non-comparable evidence. The final heading is one or two practical questions, not medical instructions. Include a References section only for studies actually cited. If the evidence cannot answer the question, say so briefly under What we don't know; never invent citations or a source quote.
       """
+
+  # DietNerdV2's detailed synthesis reviews a larger body of combined sources.
+  # Keep modern evidence and safety gates: never force eight citations when only
+  # fewer relevant human studies are available, or cite an unsupported claim.
+  if answer_mode == "heavy":
+    system_prompt_response += (
+      " Heavy research mode: compare the strongest directly relevant human studies "
+      "across the supplied source set, including study design, population, outcome "
+      "and disagreements. Where sufficient directly relevant studies exist, examine "
+      "up to 20 distinct sources. Do not invent studies, cite a minimum number, "
+      "or turn the user's uploaded PDF or profile into peer-reviewed evidence. "
+      "If a selected PubMed paper is supplied, distinguish its findings from the "
+      "broader literature. A user PDF may provide context but is not a verified study."
+    )
 
   personal_context_section = (
     f"\n      User's Personal Context (uploaded document):\n      {attachment_text}\n"

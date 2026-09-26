@@ -14,7 +14,11 @@ Related saved-question suggestions, attachment research (including a selected pa
 
 ### Answer depth
 
-The current conversational answer is the light path. A separate heavy mode intended to use the original DietNerdV2 pipeline is **not yet wired or deployed**. That upstream repository is access-restricted in this workspace, so we cannot describe its exact pipeline or promise that its long-form answer, article analysis and safety review are reproduced here. Do not label the current light pipeline "DietNerdV2 heavy" merely because it retrieves many titles. Once the original code is available, the heavy path needs its own review and tests for article search, source count and quality, similar-question suggestions, PDF output, reference analysis with full-article links, and safety treatment of pros, cons and risks.
+Each question can use **Light** (the standard PubMed and evidence flow) or **Heavy**. The supplied DietNerdV2 code's standard PubMed path overlaps the existing app; its distinct detailed path combines a PubMed search with an explicitly selected PMID or PDF and a broader synthesis. Heavy adapts that combined-source path into the current authenticated app. Selected PMIDs join the processed PubMed set, while selected PDFs are summarized separately and clearly labeled as unverified user-provided sources; they are never saved as published article analysis or promoted to Article Analysis links. Heavy does not use generic answer caching. Citation and safety rules from the current app stay in force: it never forces a minimum reference count when directly relevant human sources are lacking. It can take longer than Light.
+
+The user's diet profile can also hold private PDF/TXT/CSV files, up to 5 MB each. The profile text and files are context only when "Use my profile" is enabled for a saved conversation. Temporary chat never reads them. Ordinary saved-chat attachments remain separate from these profile files.
+
+Heavy source-combination behavior has local unit tests, but production deployment and a live, source-grounded answer verification are separate checks. A full review of every branch in the original DietNerdV2 code is not claimed.
 
 ## Implementation
 

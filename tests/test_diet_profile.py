@@ -145,7 +145,8 @@ class ConversationProfileBoundaryTest(unittest.TestCase):
                  patch.object(main, '_run_research_with_key') as run:
                 response = client.post('/process_query', json={'user_query':'q', 'temporary':True, 'use_profile':True})
             self.assertEqual(response.status_code, 200, response.text)
-            self.assertFalse(run.call_args.args[-1])
+            self.assertFalse(run.call_args.args[-2])
+            self.assertEqual(run.call_args.args[-1], 'light')
             rid = response.json()['request_id']
             with main.request_event_lock:
                 for table in (main.request_events, main.request_event_base, main.request_updated_at,

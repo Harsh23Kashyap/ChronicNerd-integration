@@ -1,6 +1,7 @@
 from helper_functions import *
 from conversation_store import append_turn
 import auth
+from heavy_sources import summarize_selected_pdf
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Query, UploadFile, File, Form, Depends, Request, Response
 from fastapi.responses import StreamingResponse
@@ -27,6 +28,7 @@ import os
 import mysql.connector
 
 import logging
+import re
 
 #Sim search
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -217,6 +219,7 @@ class QueryModel(BaseModel):
     attachment_filename: Optional[str] = None
     attachment_base64: Optional[str] = None
     paper_pmid: Optional[str] = None
+    answer_mode: str = "light"
 
 class AuthModel(BaseModel):
     email: str
@@ -482,6 +485,8 @@ async def cached_answer(query: QueryModel, email: str = Depends(current_user)):
     if conversation_id and not conversation_belongs_to(query.email, conversation_id):
         raise HTTPException(status_code=404, detail="Conversation not found.")
 
+    if query.answer_mode == "heavy":
+        raise HTTPException(status_code=409, detail="Heavy mode requires full source research.")
     # Generic cached answers do not carry account profile context. A cache hit
     # must never stand in for a personalized response, regardless of client UI.
     use_profile = conversation_uses_profile(email, conversation_id) if conversation_id else query.use_profile
@@ -654,6 +659,19 @@ async def read_article_analysis(pmid: str, email: str = Depends(current_user)):
     return {"pmid": pmid, "title": article.get("title") or "Article analysis",
             "citation": article.get("citation") or "", "summary": article.get("summary") or "",
             "url": article.get("url") if str(article.get("url", "")).startswith("https://") else ""}
+
+def fetch_selected_pmid_articles(pmid: str):
+    """Adapt DietNerdV2's selected-PMID lane, retaining authenticated request scope."""
+    if not isinstance(pmid, str) or not pmid.isascii() or not pmid.isdigit() or len(pmid) > 12:
+        raise ValueError("Invalid selected PMID")
+    Entrez.email = os.getenv('ENTREZ_EMAIL')
+    Entrez.api_key = os.getenv('NCBI_API_KEY') or None
+    handle = exponential_backoff(Entrez.efetch, db="pubmed", id=pmid, rettype="xml")
+    try:
+        return Entrez.read(handle)["PubmedArticle"]
+    finally:
+        if handle is not None:
+            handle.close()
 
 def fetch_paper_record(pmid: str):
     if not isinstance(pmid, str) or not pmid.isascii() or not pmid.isdigit() or len(pmid) > 12:
@@ -1034,6 +1052,8 @@ async def process_query(background_tasks: BackgroundTasks, query: QueryModel, re
     return await _start_query(background_tasks, query, email)
 
 async def _start_query(background_tasks, query, email, temporary_attachment_context=None):
+    if query.answer_mode not in ("light", "heavy"):
+        raise HTTPException(status_code=400, detail="Invalid answer mode.")
     query.email = email
     paper_context = None
     if query.paper_pmid is not None:
@@ -1096,7 +1116,7 @@ async def _start_query(background_tasks, query, email, temporary_attachment_cont
             raise
     # New conversation choice is supplied with creation; existing chats use the stored setting.
     use_profile = False if query.temporary else (query.use_profile if query.conversation_id is None else conversation_uses_profile(query.email, conversation_id))
-    background_tasks.add_task(_run_research_with_key, query.user_query, request_id, query.email, conversation_id, temporary_history, temporary_attachment_context, paper_context, use_profile)
+    background_tasks.add_task(_run_research_with_key, query.user_query, request_id, query.email, conversation_id, temporary_history, temporary_attachment_context, paper_context, use_profile, query.answer_mode)
     return JSONResponse({"request_id": request_id, "conversation_id": conversation_id})
 
 def _prune_request_events():
@@ -1174,9 +1194,9 @@ def get_user_documents(email: str):
     finally:
         connection.close()
 
-def _run_research_with_key(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None, paper_context=None, use_profile=True):
+def _run_research_with_key(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None, paper_context=None, use_profile=True, answer_mode="light"):
     try:
-        result = process_user_query(user_query, request_id, email, conversation_id, temporary_history, temporary_attachment_context, paper_context, use_profile)
+        result = process_user_query(user_query, request_id, email, conversation_id, temporary_history, temporary_attachment_context, paper_context, use_profile, answer_mode)
         if conversation_id:
             logging.info("Conversation title job queued")
             scope_context = copy_context()
@@ -1273,7 +1293,7 @@ def _send_article_titles(request_id: str, articles: list, stage: str):
         }))
 
 
-def process_user_query(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None, paper_context=None, use_profile=True):
+def process_user_query(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None, paper_context=None, use_profile=True, answer_mode="light"):
     session_memory = get_session_memory(email, conversation_id) if conversation_id else (temporary_history or [])
     raw_question = user_query
 
@@ -1289,7 +1309,7 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
     attachment_exist = bool(user_attachment_context)
     attachment_based_answer = False
 
-    if conversation_id and not temporary_attachment_context and check_attachment_exists(email):
+    if conversation_id and not temporary_attachment_context and not (answer_mode == "heavy" and paper_context) and check_attachment_exists(email):
         attachment_exist = True
         documents = get_user_documents(email)
         if documents:
@@ -1298,8 +1318,10 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
             )
 
     if paper_text:
-        user_attachment_context = f"{user_attachment_context}\n\n{paper_text}" if user_attachment_context else paper_text
-        attachment_exist = True
+        if answer_mode != "heavy":
+            user_attachment_context = f"{user_attachment_context}\n\n{paper_text}" if user_attachment_context else paper_text
+            attachment_exist = True
+        # Heavy mode retrieves the selected PMID as a full article below.
 
     # Temporary requests have no saved conversation, and must never read account profile.
     profile_prompt = get_diet_profile_prompt(email) if conversation_id and use_profile else ""
@@ -1315,7 +1337,7 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
 
     attachment_partial_answer = None
     partial_question = None
-    if attachment_exist and user_attachment_context:
+    if not (answer_mode == "heavy" and temporary_attachment_context and temporary_attachment_context.startswith("Selected paper PDF: ")) and attachment_exist and user_attachment_context:
         can_answer, attachment_answer, question_not_answered = try_answer_from_attachment(user_query, user_attachment_context)
         if can_answer and attachment_answer:
             attachment_based_answer = True
@@ -1370,6 +1392,14 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
     # Relevance Classifier
     start_relevant = time.time()
     relevant_articles, irrelevant_articles = concurrent_relevance_classification(deduplicated_articles_collected, pipeline_query)
+    # DietNerdV2's detailed combined-source route: a selected PMID bypasses
+    # relevance filtering. If PubMed already returned it, keep the one copy.
+    if answer_mode == "heavy" and paper_context:
+        selected = fetch_selected_pmid_articles(paper_context["pmid"])
+        selected_ids = {str(a["MedlineCitation"]["PMID"]) for a in selected}
+        relevant_articles = [a for a in relevant_articles if str(a["MedlineCitation"]["PMID"]) not in selected_ids]
+        relevant_articles.extend(selected)
+        loop.run_until_complete(send_update(request_id, "Heavy mode: combined PubMed search with the selected PMID..."))
     end_relevant = time.time()
 
     print("relevant articles")
@@ -1393,6 +1423,15 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
         write_articles_to_db(relevant_article_summaries, env)
 
     all_relevant_articles = list(itertools.chain(relevant_article_summaries, matched_articles))
+    # V2's selected-PDF lane contributes a separately labeled, unverified
+    # source; unlike public papers it is never written to article_analysis.
+    if answer_mode == "heavy" and temporary_attachment_context and temporary_attachment_context.startswith("Selected paper PDF: "):
+        first_line, _, pdf_text = temporary_attachment_context.partition("\n")
+        filename = first_line.removeprefix("Selected paper PDF: ").strip()
+        pdf_source = summarize_selected_pdf(pdf_text, filename, client)
+        all_relevant_articles.append(pdf_source)
+        user_attachment_context = None  # Avoid duplicating full PDF text in synthesis.
+        loop.run_until_complete(send_update(request_id, "Heavy mode: included the selected PDF as an unverified source..."))
     end_processing = time.time()
 
     print(f"Processed {len(all_relevant_articles)} Articles...")
@@ -1400,7 +1439,23 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
 
     # Final Output
     start_output = time.time()
-    final_output = generate_final_response(all_relevant_articles, pipeline_query, user_attachment_context, original_articles=relevant_articles, recent_history=session_memory[-8:], profile_context=profile_prompt or None)
+    if answer_mode == "heavy":
+        loop.run_until_complete(send_update(request_id, "Heavy mode: synthesizing the combined sources..."))
+    final_output = generate_final_response(all_relevant_articles, pipeline_query, user_attachment_context, original_articles=relevant_articles, recent_history=session_memory[-8:], profile_context=profile_prompt or None, answer_mode=answer_mode)
+    # The synthesis model may ignore a supplied weight even when the question
+    # explicitly asks for a per-kg calculation. Retry synthesis once, never
+    # retrieval: private measurements stay out of PubMed queries.
+    weight_match = re.search(r"\b(?:body )?weight\s*(?:is|:|=)?\s*(\d{2,3}(?:\.\d+)?)\s*kg\b", profile_prompt, re.I) if profile_prompt else None
+    if weight_match and re.search(r"\bprotein\b", pipeline_query, re.I) and re.search(r"(?:calculat|range|body weight|my weight|daily)", pipeline_query, re.I):
+        weight = weight_match.group(1)
+        if not re.search(rf"\b{re.escape(weight)}\s*(?:kg|kilograms?)\b", final_output, re.I):
+            logging.warning("Personalized answer omitted the supplied weight; retrying synthesis once")
+            final_output = generate_final_response(
+                all_relevant_articles,
+                pipeline_query + f"\nFor this question, the self-reported body weight is {weight} kg. If the supplied human research supports a per-kg range, calculate the corresponding gram range, show multiplication and name study limits. If it does not, say no personal range is established; do not invent one.",
+                user_attachment_context, original_articles=relevant_articles,
+                recent_history=session_memory[-8:], profile_context=profile_prompt or None,
+                answer_mode=answer_mode)
     if attachment_partial_answer:
         final_output = attachment_partial_answer + "\n\n" + final_output
     end_output = time.time()
@@ -1447,12 +1502,15 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
     return_obj = {
        "end_output": final_output,
        "relevant_articles": all_relevant_articles,
-       "evidence_ledger": build_claim_evidence_ledger(final_output, all_relevant_articles)
+       "evidence_ledger": build_claim_evidence_ledger(final_output, [a for a in all_relevant_articles if not str(a.get('publication_type', '')).startswith('User-supplied PDF')])
     }
 
     main_output, citations = split_end_output(return_obj["end_output"])
     relevant_articles = return_obj.get("relevant_articles", [])
-    updated_citations = match_citations_with_articles(citations, all_relevant_articles)
+    # User PDF summaries are not verified external articles and have no trusted
+    # source URL; never upgrade their citation into an Article Analysis link.
+    citation_articles = [a for a in all_relevant_articles if not str(a.get('publication_type', '')).startswith('User-supplied PDF')]
+    updated_citations = match_citations_with_articles(citations, citation_articles)
     return_obj["end_output"] = final_output
     return_obj["citations_obj"] = updated_citations
     return_obj["citations"] = citations

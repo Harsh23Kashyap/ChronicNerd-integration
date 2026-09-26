@@ -412,6 +412,7 @@ const getAnswer = async (question) => {
                 user_query: question,
                 conversation_id: getConversationId(),
                 use_profile: document.getElementById('use-profile').checked,
+                answer_mode: document.getElementById('answer-mode').value,
             }),
         });
         if (!response.ok) {
@@ -1111,11 +1112,19 @@ function conversationHasTurns() {
 }
 
 let questionInFlight = false;
+// Answer mode is a per-question choice, not a persistent account profile setting.
+document.getElementById('answer-mode').addEventListener('change', event => {
+    if (questionInFlight) { event.target.value = 'light'; return; }
+    document.querySelector('.hint').textContent = event.target.value === 'heavy'
+        ? 'Heavy combines PubMed research with the paper you choose. It takes longer.'
+        : 'Light uses the standard research path.';
+});
 let selectedSuggestion = false;
 function setComposerBusy(busy) {
     questionInFlight = busy;
     document.getElementById('submit').disabled = busy;
     document.getElementById('use-profile').disabled = busy || temporaryChat;
+    document.getElementById('answer-mode').disabled = busy;
     document.getElementById('question').setAttribute('aria-busy', busy ? 'true' : 'false');
 }
 
@@ -1123,7 +1132,7 @@ async function runGeneration(userQuery, pending) {
     const isTemporary = temporaryChat;
     const paperFile = paperContext?.file || null;
     const file = paperFile || (isTemporary ? temporaryFile : null);
-    const payload = { user_query: userQuery, conversation_id: getConversationId(), temporary: isTemporary, use_profile: !isTemporary && document.getElementById('use-profile').checked, temporary_history: isTemporary ? temporaryTurns.slice(-8) : [] };
+    const payload = { user_query: userQuery, conversation_id: getConversationId(), temporary: isTemporary, use_profile: !isTemporary && document.getElementById('use-profile').checked, temporary_history: isTemporary ? temporaryTurns.slice(-8) : [], answer_mode: document.getElementById('answer-mode').value };
     if (paperContext?.pmid) payload.paper_pmid = paperContext.pmid;
     if (file) {
         const bytes = new Uint8Array(await file.arrayBuffer());
@@ -1322,7 +1331,7 @@ document.getElementById('submit').addEventListener('click', async () => {
         return;
     }
 
-    if (temporaryChat || document.getElementById('use-profile').checked) {
+    if (temporaryChat || document.getElementById('use-profile').checked || document.getElementById('answer-mode').value === 'heavy') {
         // Generic cache and similar saved answers cannot include this account's profile.
         await generateAnswer(question);
         return;
@@ -1842,6 +1851,7 @@ function setProfileUseUI(enabled, temporary = false) {
     const toggle = document.getElementById('use-profile');
     toggle.checked = !temporary && enabled;
     toggle.disabled = temporary || questionInFlight;
+    document.getElementById('answer-mode').disabled = questionInFlight;
     document.getElementById('profile-use-note').textContent = temporary
         ? 'Temporary chats never use your profile.'
         : 'Applies to this conversation only.';

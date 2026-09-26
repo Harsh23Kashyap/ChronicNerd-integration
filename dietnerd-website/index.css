@@ -655,3 +655,9 @@ html[data-theme=dark] #profile-additional-notes{background:#29372e;color:#eaf3ec
 #profile-dialog .dialog-actions{position:sticky;bottom:-1px;z-index:3;margin-top:8px;padding:10px 0 0;background:var(--paper);border-top:1px solid var(--line)}
 #profile-dialog form{display:block}
 #profile-dialog .profile-files input[type=file]{height:auto;padding:8px;font-size:12px}
+
+.header-answer-mode{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;color:var(--muted)}
+.header-answer-mode select{max-width:90px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);font:600 12px "DM Sans",sans-serif;padding:6px 7px;cursor:pointer}
+.header-answer-mode select:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+.header-answer-mode select:disabled{opacity:.6;cursor:wait}
+@media(max-width:800px){.header-answer-mode span{display:none}.header-answer-mode select{max-width:74px;padding:5px}}
