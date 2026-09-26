@@ -36,6 +36,7 @@ class PaperPDFTest(unittest.TestCase):
         self.assertEqual(result.status_code, 400)
     def test_saved_chat_uses_selected_paper_instead_of_account_documents(self):
         with patch.object(main, 'get_session_memory', return_value=[]), \
+             patch.object(main, 'get_profile_documents', return_value=[]), \
              patch.object(main, 'check_attachment_exists') as account_docs, \
              patch.object(main, 'try_answer_from_attachment', return_value=(True,'The PDF says oats lowered LDL.',None)) as answer, \
              patch.object(main, 'append_session_memory'), \

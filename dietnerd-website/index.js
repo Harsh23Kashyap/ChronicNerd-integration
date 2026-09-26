@@ -1750,6 +1750,53 @@ let paperContext = null;
     const notes = document.getElementById('profile-additional-notes');
     const error = document.getElementById('profile-error');
     const success = document.getElementById('profile-success');
+    const profileFileInput = document.getElementById('profile-file-input');
+    const profileFileList = document.getElementById('profile-file-list');
+    const profileFileStatus = document.getElementById('profile-file-status');
+    async function loadProfileFiles() {
+        profileFileList.replaceChildren();
+        try {
+            const response = await apiFetch('/profile/documents');
+            if (!response.ok) throw new Error(await DietNerdAPI.readError(response, 'Could not load profile files.'));
+            const {documents} = await response.json();
+            for (const filename of documents) {
+                const item = document.createElement('li');
+                const label = document.createElement('span');
+                label.textContent = filename;
+                const remove = document.createElement('button');
+                remove.type = 'button'; remove.className = 'secondary-button'; remove.textContent = 'Remove';
+                remove.setAttribute('aria-label', `Remove ${filename}`);
+                remove.addEventListener('click', async () => {
+                    if (!window.confirm(`Remove ${filename} from your profile?`)) return;
+                    try {
+                        const reply = await apiFetch(`/profile/documents?filename=${encodeURIComponent(filename)}`, {method: 'DELETE'});
+                        if (!reply.ok) throw new Error(await DietNerdAPI.readError(reply, 'Could not remove file.'));
+                        profileFileStatus.textContent = `${filename} removed.`;
+                        await loadProfileFiles();
+                    } catch (err) { profileFileStatus.textContent = err.message; }
+                });
+                item.append(label, remove); profileFileList.append(item);
+            }
+            if (!documents.length) profileFileStatus.textContent = 'No profile files saved.';
+        } catch (err) { profileFileStatus.textContent = err.message; }
+    }
+    document.getElementById('profile-file-upload').addEventListener('click', async () => {
+        const file = profileFileInput.files[0];
+        if (!file) { profileFileStatus.textContent = 'Choose a file first.'; return; }
+        if (!/\.(pdf|txt|csv)$/i.test(file.name) || file.size > 5 * 1024 * 1024 || file.size === 0) {
+            profileFileStatus.textContent = 'Choose a PDF, TXT or CSV file up to 5 MB.'; return;
+        }
+        profileFileStatus.textContent = 'Adding file...';
+        try {
+            const payload = new FormData(); payload.append('attachment', file);
+            const response = await apiFetch('/profile/documents', {method: 'POST', body: payload});
+            if (!response.ok) throw new Error(await DietNerdAPI.readError(response, 'Could not add file.'));
+            profileFileInput.value = '';
+            profileFileStatus.textContent = `${file.name} saved to your profile.`;
+            await loadProfileFiles();
+            profileFileStatus.textContent = `${file.name} saved to your profile.`;
+        } catch (err) { profileFileStatus.textContent = err.message; }
+    });
     async function loadProfile() {
         error.textContent = ''; success.textContent = '';
         try {
@@ -1777,6 +1824,7 @@ let paperContext = null;
         dialog.showModal();
         closeAge();
         loadProfile();
+        loadProfileFiles();
     });
     document.getElementById('profile-cancel').addEventListener('click', () => dialog.close());
     document.getElementById('profile-clear').addEventListener('click', async () => {

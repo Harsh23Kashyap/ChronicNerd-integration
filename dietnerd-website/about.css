@@ -75,3 +75,6 @@ html[data-theme=dark] .feature-demo .mini-field strong,html[data-theme=dark] .fe
 @keyframes featureNode{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
 html[data-theme=dark] .feature-illustration{stroke:#9fd1ba}html[data-theme=dark] .feature-illustration .svg-detail{stroke:#85ae99}html[data-theme=dark] .feature-illustration .svg-node{fill:#26372c;stroke:#9fd1ba}
 @media(prefers-reduced-motion:reduce){.feature-card.feature-in-view .feature-illustration .draw-path,.feature-card.feature-in-view .feature-illustration .svg-detail,.feature-card.feature-in-view .feature-illustration .svg-node-delayed{animation:none}}
+
+.team-photo{display:block;width:84px;height:84px;object-fit:cover;border-radius:18px;border:2px solid var(--line);background:var(--paper)}
+.team-card h3{margin-top:20px}.team-link{display:inline-flex;gap:5px;margin-top:14px;font-size:13px;font-weight:700;color:var(--forest-2);text-underline-offset:3px}.team-link:focus-visible{outline:2px solid currentColor;outline-offset:3px}

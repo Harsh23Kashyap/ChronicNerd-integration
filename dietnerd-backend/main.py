@@ -138,6 +138,16 @@ def create_tables():
             )
         """)
         cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_profile_documents (
+                email VARCHAR(255) NOT NULL,
+                filename VARCHAR(255) NOT NULL,
+                content LONGTEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (email, filename),
+                FOREIGN KEY (email) REFERENCES users(email) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_sessions (
                 token_hash CHAR(64) PRIMARY KEY,
                 email VARCHAR(255) NOT NULL,
@@ -475,7 +485,7 @@ async def cached_answer(query: QueryModel, email: str = Depends(current_user)):
     # Generic cached answers do not carry account profile context. A cache hit
     # must never stand in for a personalized response, regardless of client UI.
     use_profile = conversation_uses_profile(email, conversation_id) if conversation_id else query.use_profile
-    if use_profile and get_diet_profile_prompt(email):
+    if use_profile and (get_diet_profile_prompt(email) or get_profile_documents(email)):
         raise HTTPException(status_code=409, detail="A personalized answer needs fresh research.")
 
     # Cache lookup uses the literal question. Context rewriting belongs only to
@@ -893,6 +903,64 @@ async def put_profile(profile: ProfileModel, email: str = Depends(current_user))
     return {"age_range": age_range, "goals": goals, "conditions": conditions}
 
 
+@app.post("/profile/documents")
+async def upload_profile_document(attachment: UploadFile = File(...), email: str = Depends(current_user)):
+    filename = os.path.basename((attachment.filename or "").replace("\\", "/")).strip()
+    if not filename or len(filename) > 255 or os.path.splitext(filename)[1].lower() not in ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Choose a PDF, TXT or CSV file with a valid name.")
+    file_bytes = await attachment.read(MAX_UPLOAD_BYTES + 1)
+    if not file_bytes or len(file_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"Files must be {MAX_UPLOAD_BYTES // (1024 * 1024)} MB or smaller.")
+    if filename.lower().endswith('.pdf') and not file_bytes.startswith(b'%PDF-'):
+        raise HTTPException(status_code=400, detail="The PDF file is invalid.")
+    text = extract_text_from_upload(file_bytes, filename).strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="No readable text was found in this file.")
+    if len(text) > 80000:
+        raise HTTPException(status_code=413, detail="Extracted text is too long for a profile file.")
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("INSERT INTO user_profile_documents (email, filename, content) VALUES (%s, %s, %s) "
+                       "ON DUPLICATE KEY UPDATE content = VALUES(content)", (email, filename, text))
+        connection.commit()
+    finally:
+        connection.close()
+    return {"filename": filename}
+
+@app.get("/profile/documents")
+async def list_profile_documents(email: str = Depends(current_user)):
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT filename FROM user_profile_documents WHERE email = %s ORDER BY filename", (email,))
+        names = [row[0] for row in cursor.fetchall()]
+    finally:
+        connection.close()
+    return {"documents": names}
+
+@app.delete("/profile/documents")
+async def remove_profile_document(filename: str = Query(...), email: str = Depends(current_user)):
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("DELETE FROM user_profile_documents WHERE email = %s AND filename = %s", (email, filename))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Profile file not found.")
+        connection.commit()
+    finally:
+        connection.close()
+    return {"status": "ok"}
+
+def get_profile_documents(email: str):
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT filename, content FROM user_profile_documents WHERE email = %s ORDER BY filename", (email,))
+        return cursor.fetchall()
+    finally:
+        connection.close()
+
 @app.post("/process_query/temporary_attachment")
 async def process_temporary_attachment(background_tasks: BackgroundTasks, request: Request, email: str = Depends(current_user)):
     body = bytearray()
@@ -1235,8 +1303,15 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
 
     # Temporary requests have no saved conversation, and must never read account profile.
     profile_prompt = get_diet_profile_prompt(email) if conversation_id and use_profile else ""
-    # Keep self-reported profile separate from document evidence. It is context,
-    # not a retrieved paper, and must never turn a file answer into a clinical claim.
+    if conversation_id and use_profile:
+        profile_documents = get_profile_documents(email)
+        if profile_documents:
+            profile_files = "\n\n".join(
+                f"Profile file: {name}\n{text[:12000]}" for name, text in profile_documents[:5]
+            )
+            profile_prompt = (profile_prompt + "\n\n" + profile_files).strip()
+    # Keep self-reported profile and its files separate from research evidence.
+    # Neither is a retrieved paper or permitted to drive public research queries.
 
     attachment_partial_answer = None
     partial_question = None

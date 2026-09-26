@@ -83,6 +83,7 @@ class DietProfilePromptTest(unittest.TestCase):
             captured['question'] = question
             return ('general', 'contention', ['q'])
         with patch.object(main, 'get_diet_profile_prompt', return_value='PROFILE PROMPT'), \
+             patch.object(main, 'get_profile_documents', return_value=[]), \
              patch.object(main, 'get_session_memory', return_value=[]), \
              patch.object(main, 'check_attachment_exists', return_value=False), \
              patch.object(main, 'query_generation', side_effect=capture), \
@@ -106,6 +107,7 @@ class DietProfilePromptTest(unittest.TestCase):
             captured['context'] = context
             return (True, 'Grounded response', None)
         with patch.object(main, 'get_diet_profile_prompt', return_value='PROFILE PROMPT'), \
+             patch.object(main, 'get_profile_documents', return_value=[]), \
              patch.object(main, 'get_session_memory', return_value=[]), \
              patch.object(main, 'try_answer_from_attachment', side_effect=answer), \
              patch.object(main, 'append_session_memory'), patch.object(main, 'get_conversation_summary', return_value=''), \

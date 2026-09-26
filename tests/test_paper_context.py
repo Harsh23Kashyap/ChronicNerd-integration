@@ -27,6 +27,7 @@ class PaperContextProcessingTest(unittest.TestCase):
             captured['context'] = context
             return (True, 'Combined answer.', None)
         with patch.object(main, 'get_session_memory', return_value=[]), \
+             patch.object(main, 'get_profile_documents', return_value=[]), \
              patch.object(main, 'check_attachment_exists', return_value=True), \
              patch.object(main, 'get_user_documents', return_value={'note.txt': 'Personal note text.'}), \
              patch.object(main, 'try_answer_from_attachment', side_effect=capture), \
