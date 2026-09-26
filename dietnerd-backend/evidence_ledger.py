@@ -54,7 +54,7 @@ def build_claim_evidence_ledger(answer, articles):
                 'endpoint': None,
                 'support_status': 'not independently verified' if article else 'source unresolved',
                 'evidence_passage': None,
-                'evidence_note': ('Source matched by title; passage and support not verified.' if article
+                'evidence_note': ('Citation identity matched by title only. This does not verify the claim or its supporting passage.' if article
                                   else 'Citation could not be matched uniquely to a retrieved source.'),
             })
     return rows

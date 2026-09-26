@@ -86,6 +86,7 @@ def create_tables():
                 title VARCHAR(255),
                 next_query_number INT NOT NULL DEFAULT 1,
                 title_locked TINYINT(1) NOT NULL DEFAULT 0,
+                deleted_at TIMESTAMP NULL DEFAULT NULL,
                 use_profile TINYINT(1) NOT NULL DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -103,6 +104,7 @@ def create_tables():
                 raw_question TEXT,
                 standalone_question TEXT,
                 answer LONGTEXT,
+                deleted_at TIMESTAMP NULL DEFAULT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 INDEX idx_email (email),
                 UNIQUE KEY uq_conversation_query (conversation_id, query_number),
@@ -110,12 +112,21 @@ def create_tables():
                 FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id) ON DELETE CASCADE
             )
         """)
+        cursor.execute("SHOW COLUMNS FROM conversations LIKE 'deleted_at'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE conversations ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL")
+        cursor.execute("SHOW COLUMNS FROM user_session_memory LIKE 'deleted_at'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE user_session_memory ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL")
         cursor.execute("SHOW COLUMNS FROM conversations LIKE 'use_profile'")
         if not cursor.fetchone():
             cursor.execute("ALTER TABLE conversations ADD COLUMN use_profile TINYINT(1) NOT NULL DEFAULT 1")
         cursor.execute("SHOW COLUMNS FROM user_session_memory LIKE 'sources_json'")
         if not cursor.fetchone():
             cursor.execute("ALTER TABLE user_session_memory ADD COLUMN sources_json LONGTEXT")
+        cursor.execute("SHOW COLUMNS FROM user_session_memory LIKE 'research_audit_json'")
+        if not cursor.fetchone():
+            cursor.execute("ALTER TABLE user_session_memory ADD COLUMN research_audit_json LONGTEXT")
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_conversation_summary (
                 email VARCHAR(255) NOT NULL,
@@ -451,8 +462,8 @@ async def change_password(body: ChangePasswordModel, request: Request, email: st
     return {"message": "Password updated. Other devices have been signed out."}
 
 disclaimer = """
-DietNerd is an exploratory tool designed to enrich your conversations with a registered dietitian or registered dietitian nutritionist, who can then review your profile before providing recommendations.
-Please be aware that the insights provided by DietNerd may not fully take into consideration all potential medication interactions or pre-existing conditions.
+DietChat is an exploratory tool designed to enrich your conversations with a registered dietitian or registered dietitian nutritionist, who can then review your profile before providing recommendations.
+Please be aware that the insights provided by DietChat may not fully take into consideration all potential medication interactions or pre-existing conditions.
 To find a local expert near you, use this website: https://www.eatright.org/find-a-nutrition-expert
 """
 
@@ -472,66 +483,16 @@ async def root():
 
 @app.get("/db_sim_search/{question:str}")
 async def sim_search(question:str, email: str = Depends(current_user)):
-   decoded_query = unquote(question)
-   result = await sim_score(decoded_query)
-   return result
+   # Historical question_answer rows were globally keyed and can contain
+   # profile- or PDF-derived private questions. Never surface shared suggestions.
+   return []
 
 @app.post("/cached_answer")
 async def cached_answer(query: QueryModel, email: str = Depends(current_user)):
-    query.email = email
-    conversation_id = query.conversation_id
-    if query.temporary:
-        raise HTTPException(status_code=400, detail="Temporary chats cannot use saved answers.")
-    if conversation_id and not conversation_belongs_to(query.email, conversation_id):
-        raise HTTPException(status_code=404, detail="Conversation not found.")
-
-    if query.answer_mode == "heavy":
-        raise HTTPException(status_code=409, detail="Heavy mode requires full source research.")
-    # Generic cached answers do not carry account profile context. A cache hit
-    # must never stand in for a personalized response, regardless of client UI.
-    use_profile = conversation_uses_profile(email, conversation_id) if conversation_id else query.use_profile
-    if use_profile and (get_diet_profile_prompt(email) or get_profile_documents(email)):
-        raise HTTPException(status_code=409, detail="A personalized answer needs fresh research.")
-
-    # Cache lookup uses the literal question. Context rewriting belongs only to
-    # the generation path, so a cache miss cannot invoke the rewrite model twice.
-    standalone_question = query.user_query
-    result = await query_db_final(standalone_question)
-    if not result:
-        raise HTTPException(status_code=404, detail="Cached answer not found.")
-
-    if not conversation_id:
-        conversation_id = create_conversation(query.email, query.user_query[:120], query.use_profile)
-    request_id = str(uuid.uuid4())
-    cached_payload = result[0][1]
-    try:
-        cached_answer_text = json.loads(cached_payload)["end_output"]
-    except (TypeError, ValueError, KeyError, IndexError):
-        raise HTTPException(status_code=500, detail="Cached answer has an invalid format.")
-    from answer_sources import extract_answer_sources
-    cached_obj = json.loads(cached_payload)
-    cached_sources = extract_answer_sources(cached_answer_text, cached_obj.get("citations_obj", {}))
-    append_session_memory(query.email, conversation_id, {
-        "sources": cached_sources,
-        "request_id": request_id,
-        "raw_question": query.user_query,
-        "standalone_question": standalone_question,
-        "answer": cached_answer_text,
-    })
-    summary = update_conversation_summary(
-        get_conversation_summary(query.email, conversation_id),
-        standalone_question,
-        cached_answer_text,
-    )
-    set_conversation_summary(query.email, conversation_id, summary)
-    logging.info("Conversation title job queued (cache hit)")
-    threading.Thread(target=update_conversation_title, args=(query.email, conversation_id), daemon=True).start()
-    return {
-        "cached_payload": cached_payload,
-        "sources": cached_sources,
-        "conversation_id": conversation_id,
-        "request_id": request_id,
-    }
+    # Legacy question_answer has no owner or taint label. Even a profile-OFF
+    # lookup could read another user's earlier profile/PDF-derived answer.
+    # Fail closed until a schema migration proves every row is safe to share.
+    raise HTTPException(status_code=409, detail="Shared answer cache disabled to protect private context.")
 
 @app.get("/check_valid/{question:str}")
 async def check_valid(question:str, email: str = Depends(current_user)):
@@ -570,7 +531,7 @@ def conversation_belongs_to(email: str, conversation_id: str) -> bool:
     try:
         cursor = connection.cursor()
         cursor.execute(
-            "SELECT 1 FROM conversations WHERE conversation_id = %s AND email = %s",
+            "SELECT 1 FROM conversations WHERE conversation_id = %s AND email = %s AND deleted_at IS NULL",
             (conversation_id, email),
         )
         return cursor.fetchone() is not None
@@ -581,7 +542,7 @@ def conversation_uses_profile(email: str, conversation_id: str) -> bool:
     connection = _get_db_connection()
     try:
         cursor = connection.cursor()
-        cursor.execute("SELECT use_profile FROM conversations WHERE conversation_id = %s AND email = %s", (conversation_id, email))
+        cursor.execute("SELECT use_profile FROM conversations WHERE conversation_id = %s AND email = %s AND deleted_at IS NULL", (conversation_id, email))
         row = cursor.fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="Conversation not found.")
@@ -594,8 +555,8 @@ def get_session_memory(email: str, conversation_id: str):
     try:
         cursor = connection.cursor(dictionary=True)
         cursor.execute(
-            "SELECT query_number, request_id, raw_question, standalone_question, answer, sources_json "
-            "FROM user_session_memory WHERE email = %s AND conversation_id = %s ORDER BY query_number",
+            "SELECT query_number, request_id, raw_question, standalone_question, answer, sources_json, research_audit_json "
+            "FROM user_session_memory WHERE email = %s AND conversation_id = %s AND deleted_at IS NULL ORDER BY query_number",
             (email, conversation_id),
         )
         rows = cursor.fetchall()
@@ -604,6 +565,10 @@ def get_session_memory(email: str, conversation_id: str):
                 row["sources"] = json.loads(row.pop("sources_json") or "[]")
             except (ValueError, TypeError):
                 row["sources"] = []
+            try:
+                row["research_audit"] = json.loads(row.pop("research_audit_json") or "null")
+            except (ValueError, TypeError):
+                row["research_audit"] = None
         return rows
     finally:
         connection.close()
@@ -741,7 +706,7 @@ async def rename_conversation(conversation_id: str, body: RenameModel, email: st
     try:
         cursor = connection.cursor()
         cursor.execute(
-            "UPDATE conversations SET title = %s, title_locked = 1 WHERE email = %s AND conversation_id = %s",
+            "UPDATE conversations SET title = %s, title_locked = 1 WHERE email = %s AND conversation_id = %s AND deleted_at IS NULL",
             (title, email, conversation_id),
         )
         connection.commit()
@@ -754,10 +719,10 @@ async def set_conversation_profile(conversation_id: str, body: ConversationProfi
     connection = _get_db_connection()
     try:
         cursor = connection.cursor()
-        cursor.execute("UPDATE conversations SET use_profile = %s WHERE conversation_id = %s AND email = %s",
+        cursor.execute("UPDATE conversations SET use_profile = %s WHERE conversation_id = %s AND email = %s AND deleted_at IS NULL",
                        (int(body.use_profile), conversation_id, email))
         if cursor.rowcount == 0:
-            cursor.execute("SELECT 1 FROM conversations WHERE conversation_id = %s AND email = %s", (conversation_id, email))
+            cursor.execute("SELECT 1 FROM conversations WHERE conversation_id = %s AND email = %s AND deleted_at IS NULL", (conversation_id, email))
             if not cursor.fetchone():
                 raise HTTPException(status_code=404, detail="Conversation not found.")
         connection.commit()
@@ -769,33 +734,124 @@ async def set_conversation_profile(conversation_id: str, body: ConversationProfi
 async def list_conversations(email: str = Depends(current_user)):
     connection = _get_db_connection()
     try:
+        purge_expired_deletions(connection)
         cursor = connection.cursor(dictionary=True)
-        cursor.execute("SELECT conversation_id, title, use_profile, created_at, updated_at FROM conversations WHERE email = %s ORDER BY updated_at DESC", (email,))
-        return {"conversations": cursor.fetchall()}
+        cursor.execute("SELECT c.conversation_id, COALESCE(NULLIF(TRIM(c.title), ''), "
+                       "(SELECT LEFT(m.raw_question, 120) FROM user_session_memory m WHERE m.email = c.email "
+                       "AND m.conversation_id = c.conversation_id AND m.deleted_at IS NULL ORDER BY m.query_number LIMIT 1), "
+                       "c.title) AS title, c.use_profile, c.created_at, c.updated_at FROM conversations c "
+                       "WHERE c.email = %s AND c.deleted_at IS NULL ORDER BY c.updated_at DESC", (email,))
+        rows = cursor.fetchall()
+        connection.commit()
+        return {"conversations": rows}
     finally:
         connection.close()
+
+# Undo window is server-side so a tab refresh does not immediately destroy the turn.
+# This is a soft delete, not a privacy erasure; expired rows are purged on writes
+# and list reads. The UI explicitly labels the undo window.
+UNDO_SECONDS = 30
+
+def purge_expired_deletions(connection):
+    cursor = connection.cursor()
+    cursor.execute("DELETE FROM user_session_memory WHERE deleted_at IS NOT NULL AND deleted_at < CURRENT_TIMESTAMP - INTERVAL 30 SECOND")
+    cursor.execute("DELETE FROM conversations WHERE deleted_at IS NOT NULL AND deleted_at < CURRENT_TIMESTAMP - INTERVAL 30 SECOND")
 
 @app.delete("/conversations/{conversation_id}")
 async def delete_conversation(conversation_id: str, email: str = Depends(current_user)):
     connection = _get_db_connection()
     try:
         cursor = connection.cursor()
-        cursor.execute(
-            "DELETE FROM conversations WHERE conversation_id = %s AND email = %s",
-            (conversation_id, email),
-        )
+        purge_expired_deletions(connection)
+        cursor.execute("UPDATE conversations SET deleted_at = CURRENT_TIMESTAMP WHERE conversation_id = %s AND email = %s AND deleted_at IS NULL",(conversation_id,email))
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Conversation not found.")
         connection.commit()
     finally:
         connection.close()
-    return {"status": "ok"}
+    return {"status":"deleted","undo_seconds":UNDO_SECONDS}
+
+@app.post("/conversations/{conversation_id}/restore")
+async def restore_conversation(conversation_id: str, email: str = Depends(current_user)):
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("UPDATE conversations SET deleted_at = NULL WHERE conversation_id = %s AND email = %s AND deleted_at >= CURRENT_TIMESTAMP - INTERVAL 30 SECOND",(conversation_id,email))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Undo window expired or conversation not found.")
+        cursor.execute("DELETE FROM user_conversation_summary WHERE conversation_id = %s AND email = %s",(conversation_id,email))
+        connection.commit()
+    finally:
+        connection.close()
+    return {"status":"restored"}
+
+@app.delete("/conversations/{conversation_id}/turns/{query_number}")
+async def delete_conversation_turn(conversation_id: str, query_number: int, email: str = Depends(current_user)):
+    if query_number < 1 or not conversation_belongs_to(email,conversation_id):
+        raise HTTPException(status_code=404, detail="Question-answer pair not found.")
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        purge_expired_deletions(connection)
+        cursor.execute("UPDATE user_session_memory SET deleted_at = CURRENT_TIMESTAMP WHERE conversation_id = %s AND email = %s AND query_number = %s AND deleted_at IS NULL",(conversation_id,email,query_number))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Question-answer pair not found.")
+        # The derived summary may contain deleted content, so drop it. The
+        # remaining eight raw questions are already read from active turns.
+        cursor.execute("DELETE FROM user_conversation_summary WHERE conversation_id = %s AND email = %s",(conversation_id,email))
+        connection.commit()
+    finally:
+        connection.close()
+    return {"status":"deleted","undo_seconds":UNDO_SECONDS}
+
+@app.post("/conversations/{conversation_id}/turns/{query_number}/restore")
+async def restore_conversation_turn(conversation_id: str, query_number: int, email: str = Depends(current_user)):
+    if query_number < 1 or not conversation_belongs_to(email,conversation_id):
+        raise HTTPException(status_code=404, detail="Question-answer pair not found.")
+    connection = _get_db_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute("UPDATE user_session_memory SET deleted_at = NULL WHERE conversation_id = %s AND email = %s AND query_number = %s AND deleted_at >= CURRENT_TIMESTAMP - INTERVAL 30 SECOND",(conversation_id,email,query_number))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Undo window expired or question-answer pair not found.")
+        cursor.execute("DELETE FROM user_conversation_summary WHERE conversation_id = %s AND email = %s",(conversation_id,email))
+        connection.commit()
+    finally:
+        connection.close()
+    return {"status":"restored"}
 
 @app.get("/session_memory")
 async def read_session_memory(conversation_id: str = Query(...), email: str = Depends(current_user)):
     if not conversation_belongs_to(email, conversation_id):
         raise HTTPException(status_code=404, detail="Conversation not found.")
     entries = get_session_memory(email, conversation_id)
+    # Older saved answers have full citations but no stored source identity.
+    # Recover only unique exact titles from the article-analysis PubMed cache;
+    # if it is too large or unavailable, keep unresolved rows honest.
+    from answer_sources import recover_saved_source_links
+    candidates = []
+    # A bounded one-time title scan covers legacy turns whose model-written
+    # references were not tied to source metadata at write time.
+    if any('References' in str(e.get('answer') or '') and
+           (not e.get('sources') or any(not row.get('url') for row in e.get('sources') or [] if isinstance(row, dict)))
+           for e in entries):
+        try:
+            connection = _get_db_connection()
+            try:
+                cursor = connection.cursor()
+                cursor.execute("SELECT article_id, JSON_UNQUOTE(JSON_EXTRACT(article_json, '$.title')) "
+                               "FROM article_analysis LIMIT 10001")
+                records = cursor.fetchall()
+                if len(records) <= 10000:
+                    candidates = [{'PMID': str(pmid), 'title': title} for pmid,title in records]
+            finally:
+                connection.close()
+        except Exception:
+            logging.warning('Saved citation title recovery unavailable; leaving source links unresolved')
+    if candidates:
+        for entry in entries:
+            if not entry.get('sources') or any(not row.get('url') for row in entry.get('sources') or [] if isinstance(row, dict)):
+                entry['sources'] = recover_saved_source_links(entry.get('answer') or '', entry.get('sources'), candidates)
     return {"entries": entries, "count": len(entries), "conversation_summary": get_conversation_summary(email, conversation_id)}
 
 @app.delete("/session_memory")
@@ -1271,13 +1327,13 @@ def update_conversation_title(email: str, conversation_id: str):
         try:
             cursor = connection.cursor()
             cursor.execute(
-                "SELECT title FROM conversations WHERE email = %s AND conversation_id <> %s AND title = %s LIMIT 1",
+                "SELECT title FROM conversations WHERE email = %s AND conversation_id <> %s AND title = %s AND deleted_at IS NULL LIMIT 1",
                 (email, conversation_id, title),
             )
             if cursor.fetchone():
                 title = f"{title[:70]} {conversation_id[:4]}"
             cursor.execute(
-                "UPDATE conversations SET title = %s WHERE email = %s AND conversation_id = %s AND next_query_number = %s AND title_locked = 0",
+                "UPDATE conversations SET title = %s WHERE email = %s AND conversation_id = %s AND next_query_number = %s AND title_locked = 0 AND deleted_at IS NULL",
                 (title, email, conversation_id, latest_turn + 1),
             )
             affected = cursor.rowcount
@@ -1316,6 +1372,22 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
     if session_memory:
         user_query = generate_standalone_question(user_query, session_memory)
         if conversation_id: logging.info("[SESSION MEMORY] Standalone question generated")
+
+    # Nutrient tables use FoodData Central, not PubMed intervention evidence.
+    # Scope this narrow route to the current raw question, not prior model text.
+    from food_comparison import render_food_comparison
+    food_answer = render_food_comparison(raw_question) if not paper_context and not temporary_attachment_context else None
+    if food_answer is not None:
+        answer_text=food_answer["answer"]
+        source_rows=food_answer["sources"]
+        entry={"request_id":request_id,"raw_question":raw_question,
+               "standalone_question":user_query,"answer":answer_text,"sources":source_rows}
+        if conversation_id:
+            append_session_memory(email, conversation_id, entry)
+        result={"end_output":answer_text,"relevant_articles":[],"citations_obj":[],"citations":[],
+                "session_memory_entry":{"request_id":request_id,"sources":source_rows}}
+        loop.run_until_complete(send_update(request_id,result))
+        return result
 
     paper_text = None
     if paper_context:
@@ -1388,9 +1460,17 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
                 logging.info("[ATTACHMENT] Sending unanswered portion to PubMed")
 
     pipeline_query = partial_question if attachment_partial_answer and partial_question else user_query
+    # Retrieval needs the topic, not personal measurements supplied in the
+    # conversation. Keep the untouched question for private synthesis only.
+    retrieval_question = re.sub(
+        r"\b(?:my\s+)?(?:body\s+)?(?:weight|wieght|wt)\s*(?:is|:|=)?\s*\d{2,3}(?:\.\d+)?\s*(?:kg|kgs|kilograms?)\b",
+        "body weight", pipeline_query, flags=re.I)
     # Query Generation
     start_poc = time.time()
-    general_query, query_contention, query_list = query_generation(pipeline_query)
+    general_query, query_contention, query_list = query_generation(retrieval_question)
+    if answer_mode == "heavy":
+        from research_audit import heavy_search_queries
+        query_list = heavy_search_queries(general_query, query_list, retrieval_question)
     end_poc = time.time()
 
     print("Generated PubMed queries")
@@ -1399,7 +1479,7 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
     loop.run_until_complete(send_update(request_id, "Generated PubMed queries..."))
     # Article Retrieval
     start_api = time.time()
-    deduplicated_articles_collected = collect_articles(query_list, retmax=15) if answer_mode == "heavy" else collect_articles(query_list)
+    deduplicated_articles_collected = collect_articles(query_list, retmax=35) if answer_mode == "heavy" else collect_articles(query_list)
     end_api = time.time()
 
     print("Retrieved Articles")
@@ -1428,33 +1508,76 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
     reliability_analysis_df = reliability_analysis_df.where(pd.notnull(reliability_analysis_df), None)
     for col in reliability_analysis_df.select_dtypes(include=np.number).columns:
         reliability_analysis_df[col] = reliability_analysis_df[col].astype(object).where(reliability_analysis_df[col].notnull(), None)
-    # Confirmed poisoned PMID cache row: use only this request's PubMed record.
-    # Do not delete or overwrite the forensic database row.
-    quarantine_pmid = '41723912'
+    # Quarantined PMID: the saved extraction is unrelated fabricated content.
+    # Preserve the database row for forensics; rebuild from this request's
+    # original PubMed record and never write a model summary for this PMID.
+    quarantined_pmid = '41723912'
     if 'article_id' in reliability_analysis_df.columns:
         reliability_analysis_df = reliability_analysis_df[
-            reliability_analysis_df['article_id'].astype(str) != quarantine_pmid
+            reliability_analysis_df['article_id'].astype(str) != quarantined_pmid
         ]
+    quarantined_records = [record for record in relevant_articles
+        if str(record.get('MedlineCitation', {}).get('PMID', '')) == quarantined_pmid]
     matched_articles, articles_to_process = article_matching(relevant_articles, reliability_analysis_df)
-
-    print("matched articles")
-    # Article Processing
-    quarantined_records = [record for record in articles_to_process
-        if str(record['MedlineCitation']['PMID']) == quarantine_pmid]
-    articles_to_process = [record for record in articles_to_process
-        if str(record['MedlineCitation']['PMID']) != quarantine_pmid]
-    relevant_article_summaries = concurrent_article_processing(articles_to_process)
-
-    # Write Processed Articles to DB
-    if conversation_id:
-        write_articles_to_db(relevant_article_summaries, env)
-
+    quarantined_abstracts = []
     if quarantined_records:
-        from research_audit import fresh_pubmed_metadata, assemble_heavy_sources
-        abstract_sources = assemble_heavy_sources(quarantined_records, [])
-        # Build only abstract-backed source cards; no generated analysis is cached.
-        matched_articles.extend(abstract_sources)
-    all_relevant_articles = list(itertools.chain(relevant_article_summaries, matched_articles))
+        from research_audit import fresh_pubmed_metadata
+        for record in quarantined_records[:1]:
+            med = record['MedlineCitation']
+            article = med['Article']
+            fresh = fresh_pubmed_metadata(record)
+            if not fresh['abstract'].strip() or fresh['retraction_status'] == 'retracted':
+                continue
+            quarantined_abstracts.append({
+                'PMID': quarantined_pmid,
+                'title': str(article.get('ArticleTitle') or ''),
+                'url': f'https://pubmed.ncbi.nlm.nih.gov/{quarantined_pmid}/',
+                'citation': generate_ama_citation(record),
+                'analysis_scope': 'PubMed abstract only',
+                'summary': '1. PubMed abstract (original source text):\n' + fresh['abstract']
+                    + '\n2. Evidence limits:\nAbstract only. No model-generated analysis is available for this paper.',
+                'publication_type': [str(item) for item in (article.get('PublicationTypeList') or [])],
+                **fresh,
+            })
+    if quarantined_abstracts:
+        matched_articles.extend(quarantined_abstracts)
+        articles_to_process = [record for record in articles_to_process
+            if str(record['MedlineCitation']['PMID']) != quarantined_pmid]
+    print("matched articles")
+    # Heavy examines a wider PubMed pool, then deeply processes the highest-fit
+    # 30 papers. A cached model refusal is not an appraisal: reprocess it from
+    # the exact freshly fetched PubMed record. Light keeps the existing path.
+    if answer_mode == "heavy":
+        from research_audit import assemble_heavy_sources, prioritize_heavy_evidence
+        from article_analysis import useful_summary
+        screened = prioritize_heavy_evidence(
+            assemble_heavy_sources(relevant_articles, matched_articles), pipeline_query,
+            limit=30, selected_pmid=paper_context["pmid"] if paper_context else None,
+            private_goal=profile_prompt)
+        selected_ids = {str(row.get('PMID')) for row in screened}
+        good_cached = [row for row in matched_articles
+                       if str(row.get('PMID') or row.get('article_id')) in selected_ids
+                       and useful_summary(row.get('summary'))]
+        good_ids = {str(row.get('PMID') or row.get('article_id')) for row in good_cached}
+        records_for_analysis = [record for record in relevant_articles
+            if str(record['MedlineCitation']['PMID']) in selected_ids - good_ids]
+        loop.run_until_complete(send_update(request_id,
+            f"Heavy mode: examining {len(relevant_articles)} relevant PubMed records and deeply analyzing {len(records_for_analysis)} selected papers..."))
+        relevant_article_summaries = concurrent_article_processing(records_for_analysis)
+        if conversation_id and relevant_article_summaries:
+            write_articles_to_db(relevant_article_summaries, env)
+        all_relevant_articles = prioritize_heavy_evidence(
+            assemble_heavy_sources(relevant_articles, relevant_article_summaries + good_cached),
+            pipeline_query, limit=30,
+            selected_pmid=paper_context["pmid"] if paper_context else None,
+            private_goal=profile_prompt)
+        logging.info("[HEAVY SOURCE BRIDGE] relevant=%d selected=%d deeply_processed=%d",
+                     len(relevant_articles), len(all_relevant_articles), len(relevant_article_summaries))
+    else:
+        relevant_article_summaries = concurrent_article_processing(articles_to_process)
+        if conversation_id:
+            write_articles_to_db(relevant_article_summaries, env)
+        all_relevant_articles = list(itertools.chain(relevant_article_summaries, matched_articles))
     # V2's selected-PDF lane summarizes user-supplied text separately from
     # retrieved evidence. It is never written to article_analysis.
     if answer_mode == "heavy" and temporary_attachment_context and temporary_attachment_context.startswith("Selected paper PDF: "):
@@ -1476,12 +1599,43 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
     start_output = time.time()
     if answer_mode == "heavy":
         loop.run_until_complete(send_update(request_id, "Heavy mode: synthesizing the combined sources..."))
-    final_output = generate_final_response(all_relevant_articles, pipeline_query, user_attachment_context, original_articles=relevant_articles, recent_history=session_memory[-8:], profile_context=profile_prompt or None, answer_mode=answer_mode)
+    # Keep current user-stated measurements in synthesis context without ever
+    # putting private numbers into public PubMed retrieval.
+    user_weight = re.search(r"\b(?:my\s+)?(?:body\s+)?(?:weight|wieght|wt)\s*(?:is|:|=)?\s*(\d{2,3}(?:\.\d+)?)\s*(?:kg|kgs|kilograms?)\b", raw_question, re.I)
+    synthesis_context = profile_prompt
+    if user_weight and 25 <= float(user_weight.group(1)) <= 400:
+        synthesis_context = (synthesis_context + f"\nCurrent user-stated body weight: {user_weight.group(1)} kg (self-reported context, not evidence).").strip()
+    # Set calorie scope before synthesis rather than trying to delete unsafe
+    # calculations after a model has mixed them into the protein brief.
+    calorie_question = bool(re.search(r"\b(?:calori(?:e|es)|kcal|energy intake)\b", raw_question + ' ' + pipeline_query, re.I))
+    grounded_energy = bool(re.search(r"\b(?:maintenance(?: calories| intake)?|tdee|energy expenditure|current intake)\s*(?:is|:|=)?\s*\d{3,4}\s*(?:kcal|calories)", raw_question + ' ' + profile_prompt, re.I))
+    conflicting_loss_goal = bool(re.search(r"\b(?:lose weight|weight loss|fat loss|cut(?:ting)?)\b", raw_question + ' ' + profile_prompt, re.I))
+    calorie_scope = ("This is a combined protein and calorie question. Give the protein evidence and "
+        "profile-grounded protein arithmetic first. For calories, no personal kcal target, maintenance "
+        "formula or surplus/deficit can be inferred from body weight alone: state the missing goal, "
+        "activity and measured/current energy intake in one brief note. Do not summarize a numeric "
+        "calorie recommendation. Keep protein findings separate from the calorie note."
+        if answer_mode == 'heavy' and calorie_question and (not grounded_energy or conflicting_loss_goal) else '')
+    synthesis_query = pipeline_query + ('\n' + calorie_scope if calorie_scope else '')
+    final_output = generate_final_response(all_relevant_articles, synthesis_query, user_attachment_context, original_articles=relevant_articles, recent_history=session_memory[-8:], profile_context=synthesis_context or None, answer_mode=answer_mode, selected_pmid=paper_context['pmid'] if answer_mode == 'heavy' and paper_context else None)
     # The synthesis model may ignore a supplied weight even when the question
     # explicitly asks for a per-kg calculation. Retry synthesis once, never
     # retrieval: private measurements stay out of PubMed queries.
-    weight_match = re.search(r"\b(?:body )?weight\s*(?:is|:|=)?\s*(\d{2,3}(?:\.\d+)?)\s*kg\b", profile_prompt, re.I) if profile_prompt else None
-    if weight_match and re.search(r"\bprotein\b", pipeline_query + ' ' + raw_question, re.I) and re.search(r"(?:calculat|range|body weight|my weight|daily|muscle)", pipeline_query + ' ' + raw_question, re.I):
+    # Explicitly stated weight in the current question or recent USER questions
+    # wins over stale profile text. Never extract it from earlier model answers.
+    recent_user_questions = "\n".join(str(turn.get("raw_question") or "") for turn in session_memory[-8:])
+    weight_pattern = r"\b(?:my\s+)?(?:body\s+)?(?:weight|wieght|wt)\s*(?:is|:|=)?\s*(\d{2,3}(?:\.\d+)?)\s*(?:kg|kgs|kilograms?)\b"
+    weight_match = re.search(weight_pattern, raw_question, re.I)
+    if not weight_match:
+        prior_weights = list(re.finditer(weight_pattern, recent_user_questions, re.I))
+        weight_match = prior_weights[-1] if prior_weights else None
+    if not weight_match and profile_prompt:
+        weight_match = re.search(weight_pattern, profile_prompt, re.I)
+    # A short follow-up such as "my wieght is 72 kgs" needs the preceding
+    # protein question as intent, not a brand new unrelated research query.
+    protein_intent = pipeline_query + " " + raw_question + " " + recent_user_questions
+
+    if weight_match and "The available research could not be checked" not in final_output and "This answer is withheld" not in final_output and re.search(r"\bprotein\b", protein_intent, re.I) and re.search(r"(?:calculat|range|body weight|my weight|daily|muscle|intake|wieght)", protein_intent, re.I):
         weight = weight_match.group(1)
         mentions_weight = bool(re.search(rf"\b{re.escape(weight)}\s*(?:kg|kilograms?)\b", final_output, re.I))
         # If the answer gives a supported g/kg range, the requested g/day
@@ -1489,39 +1643,48 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
         per_kg_range = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:to|[-–])\s*(\d+(?:\.\d+)?)\s*(?:g|grams?)\s*(?:of protein)?\s*(?:per|/)\s*(?:kg|kilogram)", final_output, re.I)
         has_daily_result = bool(re.search(r"\b\d+(?:\.\d+)?\s*(?:to|[-–])\s*\d+(?:\.\d+)?\s*(?:g|grams?)\s*(?:/|per )?\s*(?:day|daily)\b", final_output, re.I))
         has_any_daily_result = bool(re.search(r"\b\d+(?:\.\d+)?\s*(?:g|grams?)\s*(?:/|per )?\s*(?:day|daily)\b", final_output, re.I))
-        if not mentions_weight or (per_kg_range and not has_daily_result) or (answer_mode == "heavy" and not has_any_daily_result):
+        if not mentions_weight or (per_kg_range and not has_any_daily_result) or (answer_mode == "heavy" and not has_any_daily_result):
             logging.warning("Personalized answer omitted weight or requested arithmetic; retrying synthesis once")
             final_output = generate_final_response(
                 all_relevant_articles,
-                pipeline_query + f"\nFor this question, the self-reported body weight is {weight} kg. If the supplied human research supports a per-kg range or upper bound, calculate its corresponding grams/day using {weight} kg, show multiplication and name study limits. If it does not, say no personal range is established; do not invent one.",
+                synthesis_query + f"\nFor this question, the self-reported body weight is {weight} kg. If the supplied human research supports a per-kg range or upper bound, calculate its corresponding grams/day using {weight} kg, show multiplication and name study limits. If it does not, say no personal range is established; do not invent one.",
                 user_attachment_context, original_articles=relevant_articles,
-                recent_history=session_memory[-8:], profile_context=profile_prompt or None,
-                answer_mode=answer_mode)
-            # A second model response can still omit multiplication. Only use
-            # numbers it itself states, present the arithmetic as a conditional
-            # translation, and explicitly keep clinical uncertainty attached.
-            range_after_retry = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:to|[-–])\s*(\d+(?:\.\d+)?)\s*(?:g|grams?)\s*(?:of protein)?\s*(?:per|/)\s*(?:kg|kilogram)", final_output, re.I)
-            daily_after_retry = re.search(r"\b\d+(?:\.\d+)?\s*(?:to|[-–])\s*\d+(?:\.\d+)?\s*(?:g|grams?)\s*(?:/|per )?\s*(?:day|daily)\b", final_output, re.I)
-            if range_after_retry and not daily_after_retry:
-                low, high = map(float, range_after_retry.groups())
-                mass = float(weight)
-                if 0 < low <= high <= 5 and 25 <= mass <= 400:
-                    from decimal import Decimal
-                    grams_low = Decimal(weight) * Decimal(range_after_retry.group(1))
-                    grams_high = Decimal(weight) * Decimal(range_after_retry.group(2))
-                    arithmetic = (f"\nFor the self-reported {weight} kg body weight, the stated range converts to "
-                                  f"{weight} × {range_after_retry.group(1)} = {grams_low.normalize()} g/day "
-                                  f"through {weight} × {range_after_retry.group(2)} = {grams_high.normalize()} g/day. "
-                                  "This is only arithmetic using the range above, not an individualized recommendation; "
-                                  "the evidence limits and dietitian questions still apply.\n")
-                    heading = re.search(r"(?im)^[ \t]*What we don.t know[ \t]*:?[ \t]*$", final_output)
-                    if heading:
-                        final_output = final_output[:heading.start()].rstrip() + arithmetic + "\n" + final_output[heading.start():]
-                    elif answer_mode == "heavy":
-                        references = re.search(r"(?im)^[ \t]*(?:#{1,4}[ \t]*)?References?[ \t]*:?", final_output)
-                        pos = references.start() if references else final_output.find('DietNerd is an exploratory tool')
-                        if pos < 0: pos = len(final_output)
-                        final_output = final_output[:pos].rstrip() + "\n\n" + arithmetic.strip() + "\n\n" + final_output[pos:]
+                recent_history=session_memory[-8:], profile_context=synthesis_context or None,
+                answer_mode=answer_mode, selected_pmid=paper_context['pmid'] if answer_mode == 'heavy' and paper_context else None)
+            # Do not append deterministic arithmetic to an arbitrary subgroup
+            # range. The model must show only a context-appropriate translation;
+            # the safety check below will withhold unsupported output.
+    # The follow-up retry has a richer prompt than the initial synthesis; run
+    # the personal-scope validator again on its returned text. The first-pass
+    # checker cannot protect a second generated answer by itself.
+    if answer_mode == "heavy" and not final_output.startswith(("The available research could not be checked", "The cited studies in this answer")):
+        from helper_functions import heavy_personalization_issues
+        personal_scope = raw_question + "\n" + recent_user_questions
+        if heavy_personalization_issues(final_output, personal_scope, profile_prompt):
+            final_output = ("The available research could not be checked for personal applicability. "
+                "No individualized protein target is shown; review the source studies with a registered dietitian.\n" + disclaimer)
+    # Do not let a polished-looking answer hide a source-integrity failure.
+    # A successful research synthesis that names numbered references must link
+    # them to actual retrieved citations; a fallback stays explicit.
+    # A direct intake question with no clear calorie goal or expenditure cannot
+    # justify an exact surplus/deficit. Do not silently assume weight gain.
+    # Even with a scoped synthesis prompt, reject unsupported calorie numbers.
+    # Keep the separately sourced protein response when cleanly separable.
+    if answer_mode == "heavy" and calorie_question and (not grounded_energy or conflicting_loss_goal):
+        from claim_verifier import remove_ungrounded_calorie_prescription
+        safe_answer, had_prescription = remove_ungrounded_calorie_prescription(final_output)
+        if had_prescription:
+            final_output = safe_answer or ("The calorie recommendation in this run could not be separated "
+                "from the evidence-backed findings. No personal target is shown; please try again.\n" + disclaimer)
+    if answer_mode == "heavy" and re.search(r"\[[A-Za-z][^\]\n]{1,80},\s*20\d{2}\]", final_output):
+        final_output = ("The retrieved studies could not be connected to the claims in this answer. "
+                        "No personal protein or calorie target can be verified from this run. "
+                        "Please try again rather than rely on unlinked citations.\n" + disclaimer)
+    if answer_mode == "heavy" and weight_match and "The available research could not be checked" not in final_output:
+        from claim_verifier import audit_arithmetic
+        if audit_arithmetic(final_output, weight_match.group(1)):
+            final_output = ("The calculation in this research run did not pass verification. "
+                            "No personal target is shown; please try again.\n" + disclaimer)
     if attachment_partial_answer:
         final_output = attachment_partial_answer + "\n\n" + final_output
     end_output = time.time()
@@ -1533,8 +1696,8 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
     final_output_duration = end_output - start_output
     total_runtime = poc_duration + api_duration + article_processing_duration + final_output_duration
 
-    if conversation_id:
-        write_output_to_db(user_query, final_output, all_relevant_articles, total_runtime, env)
+    # Never publish a personal, uploaded-paper or conversation-derived answer
+    # into the globally keyed question_answer table.
     end_output = time.time()
 
     print('-'*200)
@@ -1565,34 +1728,46 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
 
 
     from evidence_ledger import build_claim_evidence_ledger
+    # The browser consumes the answer, source links and audit, not full PubMed
+    # XML or article summaries. Avoid non-JSON-safe provider objects pushing SSE
+    # into its text-only fallback, which silently loses every source and audit.
     return_obj = {
        "end_output": final_output,
-       "relevant_articles": all_relevant_articles,
-       "evidence_ledger": build_claim_evidence_ledger(final_output, [a for a in all_relevant_articles if not str(a.get('publication_type', '')).startswith('User-supplied PDF')])
+       "evidence_ledger": build_claim_evidence_ledger(final_output, [a for a in all_relevant_articles if not str(a.get('publication_type', '')).startswith('User-supplied PDF') and a.get('retraction_status') != 'retracted'])
     }
 
     main_output, citations = split_end_output(return_obj["end_output"])
-    relevant_articles = return_obj.get("relevant_articles", [])
     # User PDF summaries are not verified external articles and have no trusted
     # source URL; never upgrade their citation into an Article Analysis link.
-    citation_articles = [a for a in all_relevant_articles if not str(a.get('publication_type', '')).startswith('User-supplied PDF')]
+    citation_articles = [a for a in all_relevant_articles if not str(a.get('publication_type', '')).startswith('User-supplied PDF') and a.get('retraction_status') != 'retracted']
     updated_citations = match_citations_with_articles(citations, citation_articles)
     return_obj["end_output"] = final_output
     return_obj["citations_obj"] = updated_citations
     return_obj["citations"] = citations
     
     from answer_sources import extract_answer_sources
+    from research_audit import build_audit
+    research_audit = (build_audit(raw_question, query_list, deduplicated_articles_collected,
+                                  relevant_articles, all_relevant_articles,
+                                  return_obj["evidence_ledger"], final_output, irrelevant_articles)
+                      if answer_mode == "heavy" else None)
+    if research_audit:
+        return_obj["research_audit"] = research_audit
     session_memory_entry = {
         "request_id": request_id,
         "raw_question": raw_question,
         "standalone_question": user_query,
         "answer": final_output,
-        "sources": extract_answer_sources(final_output, updated_citations, return_obj["evidence_ledger"]),
-        "evidence_ledger": return_obj["evidence_ledger"]
+        "sources": extract_answer_sources(final_output, updated_citations, return_obj["evidence_ledger"], citation_articles),
+        "evidence_ledger": return_obj["evidence_ledger"],
+        **({"research_audit": research_audit} if research_audit else {})
     }
     if conversation_id:
         append_session_memory(email, conversation_id, session_memory_entry)
-    return_obj["session_memory_entry"] = session_memory_entry
+    # Browser needs only the source list and audit from the persisted entry;
+    # exclude potentially non-JSON-safe evidence objects from the SSE payload.
+    return_obj["session_memory_entry"] = {key: session_memory_entry[key] for key in
+        ("request_id", "sources")}
     if conversation_id:
         logging.info("[SESSION MEMORY] Entry created | request_id=%s", request_id)
 

@@ -1046,7 +1046,7 @@ function appendEvidenceLedger(content, ledger) {
     const details = document.createElement('details');
     details.className = 'evidence-ledger';
     const summary = document.createElement('summary');
-    summary.textContent = `Evidence check · ${ledger.length} cited claim${ledger.length === 1 ? '' : 's'}`;
+    summary.textContent = `Citation identity · ${ledger.length} claim${ledger.length === 1 ? '' : 's'}`;
     details.append(summary);
     ledger.forEach(row => {
         const entry = document.createElement('div');
@@ -1057,7 +1057,7 @@ function appendEvidenceLedger(content, ledger) {
         source.textContent = row.source_title
             ? `Source: ${row.source_title}` : 'Source unresolved';
         const status = document.createElement('p');
-        status.textContent = row.evidence_note || 'Support not independently verified.';
+        status.textContent = row.evidence_note || 'Claim support has not been independently verified.';
         entry.append(claim, source, status);
         if (row.source_url && /^https:\/\//.test(row.source_url)) {
             const link = document.createElement('a');
@@ -1157,27 +1157,36 @@ async function runGeneration(userQuery, pending) {
     }
 
     return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = (value, error = false) => {
+            if (settled) return;
+            settled = true;
+            window.clearInterval(reconnectTimer);
+            eventSource.close();
+            if (error) reject(value); else resolve(value);
+        };
         const eventSource = new EventSource(`${baseURL}/sse?request_id=${encodeURIComponent(data.request_id)}`, { withCredentials: true });
         let lostAt = 0;
         const reconnectTimer = window.setInterval(() => {
             // EventSource retries transient failures. A lasting failure should
             // not leave the send button locked forever.
             if (lostAt && Date.now() - lostAt > 60000) {
-                window.clearInterval(reconnectTimer);
-                eventSource.close();
+                if (settled) return;
                 if (isTemporary) {
-                    reject(new Error('Research connection did not recover. Temporary answers cannot be restored after a disconnect.'));
+                    finish(new Error('Research connection did not recover. Temporary answers cannot be restored after a disconnect. Retry once to start a new request.'), true);
                 } else {
+                    lostAt = 0; // Only one history lookup per interrupted request.
                     readConversationHistory(data.conversation_id).then(async history => {
                         if (!history.ok) throw new Error('Could not retrieve the saved research answer.');
                         const saved = (await history.json()).entries?.find(entry => entry.request_id === data.request_id);
-                        if (saved?.answer) resolve({end_output:saved.answer, session_memory_entry:saved});
-                        else reject(new Error('Research connection did not recover. Open this conversation from history to check whether the answer finished.'));
-                    }).catch(reject);
+                        if (saved?.answer) finish({end_output:saved.answer, session_memory_entry:saved});
+                        else finish(new Error('Research was interrupted before an answer was saved. Retry once to start a new request.'), true);
+                    }).catch(error => finish(error, true));
                 }
             }
         }, 1000);
         eventSource.onopen = () => {
+            if (settled) return;
             if (lostAt && pending) pending.setStatus('Connected again. Catching up on research...');
             lostAt = 0;
         };
@@ -1187,13 +1196,12 @@ async function runGeneration(userQuery, pending) {
             catch { return; }
             if (!message.update) return;
             if (message.update.end_output) {
-                window.clearInterval(reconnectTimer);
-                eventSource.close();
+                if (settled) return;
                 if (!isTemporary) try {
                     localStorage.setItem('referenceObject', JSON.stringify(message.update.citations_obj || {}));
                     localStorage.setItem('citations', JSON.stringify(message.update.citations || []));
                 } catch (error) { console.warn('Could not save reference metadata locally.'); }
-                resolve(message.update);
+                finish(message.update);
             } else if (message.update.article_titles && pending) {
                 pending.addArticles(message.update);
             } else if (pending) {
@@ -1201,6 +1209,7 @@ async function runGeneration(userQuery, pending) {
             }
         };
         eventSource.onerror = () => {
+            if (settled) return;
             if (!lostAt) lostAt = Date.now();
             if (pending) pending.setStatus('Connection interrupted. Reconnecting to the same research request...');
         };
@@ -1224,7 +1233,7 @@ async function generateAnswer(question) {
         refreshTitleAfterAnswer(getConversationId());
     } catch (err) {
         console.error(err);
-        pending.fail(`${err.message || 'Something went wrong.'} Please try again.`, () => generateAnswer(question));
+        pending.fail(`${err.message || 'Something went wrong.'} Please try again.`, () => { pending.remove(); generateAnswer(question); });
     } finally {
         setComposerBusy(false);
     }
@@ -1241,7 +1250,7 @@ async function answerFromAttachment(question) {
         refreshTitleAfterAnswer(getConversationId());
     } catch (err) {
         console.error(err);
-        pending.fail(`${err.message || 'Something went wrong.'} Please try again.`, () => answerFromAttachment(question));
+        pending.fail(`${err.message || 'Something went wrong.'} Please try again.`, () => { pending.remove(); answerFromAttachment(question); });
     } finally {
         setComposerBusy(false);
     }

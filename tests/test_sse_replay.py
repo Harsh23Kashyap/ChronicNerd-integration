@@ -162,3 +162,21 @@ def test_non_json_article_metadata_does_not_lose_completed_answer():
         asyncio.run(scenario())
     finally:
         clean(rid)
+
+
+def test_expired_request_does_not_replay_a_second_terminal_answer():
+    rid = 'test-replay-expired'
+    seed(rid)
+    async def scenario():
+        await main.send_update(rid, {'end_output': 'once'})
+        first = [event async for event in main.event_generator(rid)]
+        assert len(first) == 1 and 'once' in first[0]['data']
+        with main.request_event_lock:
+            main.request_updated_at[rid] -= main.EVENT_RETENTION_SECONDS + 1
+            main._prune_request_events()
+        second = [event async for event in main.event_generator(rid)]
+        assert second == []
+    try:
+        asyncio.run(scenario())
+    finally:
+        clean(rid)

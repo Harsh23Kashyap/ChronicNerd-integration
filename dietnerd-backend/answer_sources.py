@@ -5,7 +5,7 @@ HEADING = re.compile(r'(?im)^\s*(?:#{1,4}\s*)?(?:\*\*)?References?(?:\*\*)?:?\s*
 REFERENCE = re.compile(r'^\s*(?:\[(\d+)\]|(\d+)\.)\s*(.+)$')
 
 
-def extract_answer_sources(answer, citations=None, ledger=None):
+def extract_answer_sources(answer, citations=None, ledger=None, retrieved_articles=None):
     match = HEADING.search(answer or '')
     if not match:
         return []
@@ -49,6 +49,26 @@ def extract_answer_sources(answer, citations=None, ledger=None):
                         and len(normalize(claim.get('source_title') or '')) > 12):
                     url = claim['source_url']
                     break
+        # Exact normalized title from a freshly retrieved PubMed record can
+        # recover identity when the model has altered its long AMA citation.
+        # Do not match by author/year, bracket number, substring or fuzzy score.
+        if not re.match(r'^https://', str(url), re.I) and not matched_pmid:
+            reference_text = normalize(title)
+            candidates = []
+            for article in retrieved_articles or []:
+                if not isinstance(article, dict):
+                    continue
+                article_title = normalize(article.get('title') or '')
+                pmid_candidate = str(article.get('PMID') or '')
+                if len(article_title) < 24 or not re.fullmatch(r'\d{1,12}', pmid_candidate):
+                    continue
+                # Title must be a whole phrase in the reference, not an author
+                # or topic substring; a reused title is ambiguous and withheld.
+                if re.search(r'(?<!\w)' + re.escape(article_title) + r'(?!\w)', reference_text):
+                    candidates.append(pmid_candidate)
+            if len(set(candidates)) == 1:
+                matched_pmid = candidates[0]
+                url = f'https://pubmed.ncbi.nlm.nih.gov/{matched_pmid}/'
         if not re.match(r'^https://', str(url), re.I):
             pmid = re.search(r'\bPMID\s*:\s*(\d{1,12})\b', title, re.I)
             doi = re.search(r'\b(10\.\d{4,9}/[^\s,;<>]+)', title, re.I)
@@ -60,3 +80,29 @@ def extract_answer_sources(answer, citations=None, ledger=None):
                          'pmid': matched_pmid or (pubmed.group(1) if pubmed else ''),
                          'summary_excerpt': summary_excerpt})
     return sorted(rows, key=lambda row: (not bool(row['pmid']), row['number']))
+
+
+def recover_saved_source_links(answer, stored_sources, public_articles):
+    """Fill missing links from uniquely matching cached PubMed titles, never cite support."""
+    rows = stored_sources if isinstance(stored_sources, list) else []
+    parsed = extract_answer_sources(answer)
+    existing = {row.get('number'): row for row in rows if isinstance(row, dict)}
+    by_number = {row['number']: row for row in parsed}
+    result = []
+    for number, citation in by_number.items():
+        row = dict(existing.get(number) or citation)
+        if not row.get('url'):
+            normalized = re.sub(r'\W+', ' ', citation.get('title', '').casefold()).strip()
+            candidates = set()
+            for article in public_articles:
+                title = re.sub(r'\W+', ' ', str(article.get('title') or '').casefold()).strip()
+                pmid = str(article.get('PMID') or '')
+                if len(title) < 24 or not re.fullmatch(r'\d{1,12}', pmid):
+                    continue
+                if re.search(r'(?<!\w)' + re.escape(title) + r'(?!\w)', normalized):
+                    candidates.add(pmid)
+            if len(candidates) == 1:
+                row['pmid'] = next(iter(candidates))
+                row['url'] = f"https://pubmed.ncbi.nlm.nih.gov/{row['pmid']}/"
+        result.append(row)
+    return result or rows
