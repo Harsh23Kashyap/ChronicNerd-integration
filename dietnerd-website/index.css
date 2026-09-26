@@ -570,3 +570,9 @@ html[data-theme=dark] .theme-orb{background:#dce5df;box-shadow:inset -5px -2px 0
 @media(max-width:800px){.thread-jump{bottom:140px}}@media(prefers-reduced-motion:reduce){.chat-message:not(.pending){animation:none}}
 
 html[data-theme=dark] .research-replay,html[data-theme=dark] .chat-message.assistant .message-actions{border-color:#58705e}html[data-theme=dark] .conversation-chapters{border-color:#58705e}html[data-theme=dark] #chapter-links button{color:#c4df72;border-color:#58705e}html[data-theme=dark] .followup-lens strong,html[data-theme=dark] .followup-lens button{color:#c4df72}
+
+/* Motion is tied to explicit user actions or real research events. */
+.in-chat-source.source-flash,.message-content>p.source-flash{animation:sourcePulse .8s ease-out}@keyframes sourcePulse{0%{background:#dcecc7}100%{background:transparent}}
+#chapter-links button[aria-current=true]{border-color:var(--forest-2);box-shadow:inset 0 -2px 0 var(--forest-2)}
+.thread-jump:not([hidden]){animation:quietReveal .16s ease-out both}@keyframes quietReveal{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.in-chat-source.source-flash,.message-content>p.source-flash,.thread-jump:not([hidden]){animation:none}}

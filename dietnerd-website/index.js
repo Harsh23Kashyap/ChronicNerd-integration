@@ -172,6 +172,11 @@ function appendInChatSources(content, sources) {
         const title = document.createElement('span');
         title.textContent = source.title;
         row.append(number, title);
+        if (row.tagName === 'A') row.addEventListener('click', () => {
+            const ref = String(source.number);
+            const match = [...content.querySelectorAll('p')].find(el => el.textContent.includes(`[${ref}]`));
+            for (const el of [row, match].filter(Boolean)) { el.classList.remove('source-flash'); void el.offsetWidth; el.classList.add('source-flash'); setTimeout(() => el.classList.remove('source-flash'), 850); }
+        });
         section.append(row);
     });
     const actions = content.querySelector('.message-actions');
@@ -1879,6 +1884,14 @@ function updateConversationNavigation() {
         button.addEventListener('click', () => turn.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'}));
         links.append(button);
     });
+    updateActiveChapter();
+}
+function updateActiveChapter() {
+    const turns = [...document.querySelectorAll('#chat-thread .chat-message.user')];
+    const buttons = [...document.querySelectorAll('#chapter-links button')];
+    const top = document.getElementById('chat-thread').getBoundingClientRect().top + 70;
+    let active = 0; turns.forEach((turn,i) => { if (turn.getBoundingClientRect().top <= top) active = i; });
+    buttons.forEach((button,i) => { if (i === active) button.setAttribute('aria-current','true'); else button.removeAttribute('aria-current'); });
 }
 function updateFollowupLens() {
     const turns = [...document.querySelectorAll('#chat-thread .chat-message.user')];
@@ -1893,6 +1906,7 @@ document.getElementById('view-context').addEventListener('click', () => {
 const threadForJump = document.getElementById('chat-thread');
 threadForJump.addEventListener('scroll', () => {
     const jumps = document.querySelector('.thread-jump');
+    updateActiveChapter();
     const longThread = Boolean(threadForJump.querySelector('.chat-message.user')) && threadForJump.scrollHeight > threadForJump.clientHeight + 100;
     jumps.hidden = !longThread || threadForJump.scrollTop < 140;
     document.getElementById('latest-message').hidden = threadForJump.scrollHeight - threadForJump.scrollTop - threadForJump.clientHeight < 80;
