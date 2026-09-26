@@ -457,3 +457,20 @@ html[data-theme=dark] body.temporary-mode #paper-clear{color:#f7d8ae}
 html[data-theme=dark] body.temporary-mode .composer #question::placeholder{color:#d4c1a8}
 html[data-theme=dark] body.temporary-mode .chat-header #chat-title{color:#f0c899}
 html[data-theme=dark] body.temporary-mode .temporary-chat-button[aria-pressed=true]{background:#805737;color:#fff7ed;border-color:#9c734e}
+
+/* Filter only the visible history rail; never change the saved conversation list. */
+.chat-sidebar .history-results{display:flex;flex:1 1 auto;flex-direction:column;gap:7px;min-height:0;min-width:0}
+.chat-sidebar .history-search{width:100%;min-height:36px;flex:none;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--ink);font:500 12px "DM Sans",sans-serif;outline:none}
+.chat-sidebar .history-search::placeholder{color:var(--muted)}
+.chat-sidebar .history-search:focus-visible{border-color:var(--forest);outline:2px solid var(--forest);outline-offset:1px}
+.chat-sidebar .history-results .conversation-list{flex:1 1 auto;min-height:0}
+.conversation-item[hidden],.history-search-empty[hidden]{display:none!important}
+.history-search-empty{margin:4px 2px;color:var(--muted);font:500 12px/1.4 "DM Sans",sans-serif}
+html[data-theme=dark] .chat-sidebar .history-search{background:#29372e;color:var(--ink);border-color:#526556}
+@media(max-width:800px){
+  .chat-shell>.chat-sidebar .history-results,body.conversation-mode .chat-shell>.chat-sidebar .history-results{display:none;position:absolute;z-index:11;top:49px;left:0;right:0;max-height:min(58vh,480px);padding:9px 12px;background:#edf0e4;border-bottom:1px solid var(--line);box-shadow:0 16px 24px rgba(23,63,53,.12)}
+  .chat-shell>.chat-sidebar.history-open .history-results,body.conversation-mode .chat-shell>.chat-sidebar.history-open .history-results{display:flex}
+  .chat-sidebar .history-results .conversation-list,.chat-sidebar.history-open .history-results .conversation-list{display:flex;position:static;max-height:min(47vh,400px);padding:0;border:0;box-shadow:none;background:transparent;overflow-y:auto}
+}
+
+@media(max-width:800px){html[data-theme=dark] .chat-shell>.chat-sidebar .history-results,html[data-theme=dark] body.conversation-mode .chat-shell>.chat-sidebar .history-results{background:#1d2923}}

@@ -213,6 +213,20 @@ function appendChatMessage(role, text, references = [], storedSources = null) {
     return content;
 }
 
+function filterConversationTitles() {
+    const query = document.getElementById('history-search').value.trim().toLocaleLowerCase();
+    const items = [...document.querySelectorAll('#conversation-list .conversation-item')];
+    let visible = 0;
+    items.forEach(item => {
+        const title = item.querySelector('.conversation-row')?.textContent || '';
+        item.hidden = !title.toLocaleLowerCase().includes(query);
+        if (!item.hidden) visible++;
+    });
+    const empty = document.getElementById('history-search-empty');
+    empty.hidden = !query || visible > 0;
+}
+document.getElementById('history-search').addEventListener('input', filterConversationTitles);
+
 async function refreshConversationList() {
     const select = document.getElementById('conversation-select');
     const currentId = getConversationId() || '';
@@ -252,6 +266,7 @@ async function refreshConversationList() {
         item.append(row, rename);
         list.appendChild(item);
     });
+    filterConversationTitles();
     const selectedId = (data.conversations || []).some(c => c.conversation_id === currentId) ? currentId : '';
     select.value = selectedId;
     list.querySelectorAll('.conversation-row').forEach(row => {

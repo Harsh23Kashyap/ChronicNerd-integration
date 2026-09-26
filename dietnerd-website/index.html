@@ -71,7 +71,12 @@
                 <label for="conversation-select" class="visually-hidden">Choose conversation</label>
                 <select id="conversation-select" class="visually-hidden" aria-label="Choose conversation"><option value="">New conversation</option></select>
                 <button type="button" id="history-toggle" class="history-toggle" aria-expanded="false" aria-controls="conversation-list">Chat history ▾</button>
-                <nav id="conversation-list" class="conversation-list" aria-label="Chat history"></nav>
+                <div class="history-results">
+                    <label for="history-search" class="visually-hidden">Search conversation titles</label>
+                    <input type="search" id="history-search" class="history-search" placeholder="Search conversations" autocomplete="off" aria-controls="conversation-list">
+                    <nav id="conversation-list" class="conversation-list" aria-label="Chat history"></nav>
+                    <p id="history-search-empty" class="history-search-empty" role="status" hidden>No matching conversations</p>
+                </div>
                 <button type="button" id="delete-conversation" class="delete-link">Delete current conversation</button>
                 <div class="sidebar-options" aria-label="Research options">
                     <span class="sidebar-options-heading">Research options</span>
