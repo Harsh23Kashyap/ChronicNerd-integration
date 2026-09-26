@@ -1423,15 +1423,18 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
         write_articles_to_db(relevant_article_summaries, env)
 
     all_relevant_articles = list(itertools.chain(relevant_article_summaries, matched_articles))
-    # V2's selected-PDF lane contributes a separately labeled, unverified
-    # source; unlike public papers it is never written to article_analysis.
+    # V2's selected-PDF lane summarizes user-supplied text separately from
+    # retrieved evidence. It is never written to article_analysis.
     if answer_mode == "heavy" and temporary_attachment_context and temporary_attachment_context.startswith("Selected paper PDF: "):
         first_line, _, pdf_text = temporary_attachment_context.partition("\n")
         filename = first_line.removeprefix("Selected paper PDF: ").strip()
         pdf_source = summarize_selected_pdf(pdf_text, filename, client)
-        all_relevant_articles.append(pdf_source)
-        user_attachment_context = None  # Avoid duplicating full PDF text in synthesis.
-        loop.run_until_complete(send_update(request_id, "Heavy mode: included the selected PDF as an unverified source..."))
+        # A personal PDF is not a verified retrieved article. Preserve V2's
+        # dedicated PDF-summary step but pass it as unverified context, never
+        # within Evidence and Claims or article/citation/claim ledger sources.
+        user_attachment_context = ("Selected PDF (user-provided, unverified; do not cite as a published study): "
+                                   + pdf_source["title"] + "\n" + pdf_source["summary"])
+        loop.run_until_complete(send_update(request_id, "Heavy mode: summarized the selected PDF as unverified context..."))
     end_processing = time.time()
 
     print(f"Processed {len(all_relevant_articles)} Articles...")

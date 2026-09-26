@@ -104,8 +104,8 @@ class HeavyPDFSourceTest(unittest.TestCase):
        patch.object(main,'update_conversation_summary',return_value=''),patch.object(main,'set_conversation_summary'),patch.object(main,'send_update'):
    main.process_user_query('q','req','owner@example.com','conv',temporary_attachment_context='Selected paper PDF: paper.pdf\nText',answer_mode='heavy')
   saved.assert_not_called();shortcut.assert_not_called()
-  summarize.assert_called_once();self.assertIn('User-supplied PDF',str(synth.call_args.args[0]))
-  self.assertIsNone(synth.call_args.args[2])
+  summarize.assert_called_once();self.assertEqual(synth.call_args.args[0], [])
+  self.assertIn('Selected PDF (user-provided, unverified',synth.call_args.args[2])
 
 class HeavyPromptContractTest(unittest.TestCase):
  def test_heavy_prompt_uses_v2_broad_source_synthesis_without_forced_citations(self):
