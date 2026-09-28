@@ -36,6 +36,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 import threading
 import time
+from datetime import date
 from contextvars import copy_context
 
 logging.basicConfig(level=logging.INFO)
@@ -220,6 +221,7 @@ class QueryModel(BaseModel):
     attachment_base64: Optional[str] = None
     paper_pmid: Optional[str] = None
     answer_mode: str = "light"
+    retrieval_cutoff_date: Optional[str] = None
 
 class AuthModel(BaseModel):
     email: str
@@ -1051,9 +1053,23 @@ async def process_query(background_tasks: BackgroundTasks, query: QueryModel, re
         raise HTTPException(status_code=400, detail="Use the temporary file endpoint for attachments.")
     return await _start_query(background_tasks, query, email)
 
+@app.post("/process_query/evaluation")
+async def process_evaluation_query(background_tasks: BackgroundTasks, query: QueryModel, request: Request, email: str = Depends(current_user)):
+    """Evaluation-only entry point: retrieval must be bounded by an explicit cutoff."""
+    if not query.retrieval_cutoff_date:
+        raise HTTPException(status_code=400, detail="Evaluation queries require retrieval_cutoff_date.")
+    if not strict_iso_date(query.retrieval_cutoff_date):
+        raise HTTPException(status_code=400, detail="retrieval_cutoff_date must be strict YYYY-MM-DD.")
+    if query.attachment_filename is not None or query.attachment_base64 is not None:
+        raise HTTPException(status_code=400, detail="Evaluation queries do not accept attachments.")
+    return await _start_query(background_tasks, query, email)
+
 async def _start_query(background_tasks, query, email, temporary_attachment_context=None):
     if query.answer_mode not in ("light", "heavy"):
         raise HTTPException(status_code=400, detail="Invalid answer mode.")
+    if query.retrieval_cutoff_date is not None:
+        if not strict_iso_date(query.retrieval_cutoff_date):
+            raise HTTPException(status_code=400, detail="retrieval_cutoff_date must be strict YYYY-MM-DD.")
     query.email = email
     paper_context = None
     if query.paper_pmid is not None:
@@ -1116,7 +1132,7 @@ async def _start_query(background_tasks, query, email, temporary_attachment_cont
             raise
     # New conversation choice is supplied with creation; existing chats use the stored setting.
     use_profile = False if query.temporary else (query.use_profile if query.conversation_id is None else conversation_uses_profile(query.email, conversation_id))
-    background_tasks.add_task(_run_research_with_key, query.user_query, request_id, query.email, conversation_id, temporary_history, temporary_attachment_context, paper_context, use_profile, query.answer_mode)
+    background_tasks.add_task(_run_research_with_key, query.user_query, request_id, query.email, conversation_id, temporary_history, temporary_attachment_context, paper_context, use_profile, query.answer_mode, query.retrieval_cutoff_date)
     return JSONResponse({"request_id": request_id, "conversation_id": conversation_id})
 
 def _prune_request_events():
@@ -1194,9 +1210,9 @@ def get_user_documents(email: str):
     finally:
         connection.close()
 
-def _run_research_with_key(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None, paper_context=None, use_profile=True, answer_mode="light"):
+def _run_research_with_key(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None, paper_context=None, use_profile=True, answer_mode="light", retrieval_cutoff_date=None):
     try:
-        result = process_user_query(user_query, request_id, email, conversation_id, temporary_history, temporary_attachment_context, paper_context, use_profile, answer_mode)
+        result = process_user_query(user_query, request_id, email, conversation_id, temporary_history, temporary_attachment_context, paper_context, use_profile, answer_mode, retrieval_cutoff_date)
         if conversation_id:
             logging.info("Conversation title job queued")
             scope_context = copy_context()
@@ -1293,7 +1309,7 @@ def _send_article_titles(request_id: str, articles: list, stage: str):
         }))
 
 
-def process_user_query(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None, paper_context=None, use_profile=True, answer_mode="light"):
+def process_user_query(user_query, request_id, email, conversation_id, temporary_history=None, temporary_attachment_context=None, paper_context=None, use_profile=True, answer_mode="light", retrieval_cutoff_date=None):
     session_memory = get_session_memory(email, conversation_id) if conversation_id else (temporary_history or [])
     raw_question = user_query
 
@@ -1383,7 +1399,11 @@ def process_user_query(user_query, request_id, email, conversation_id, temporary
     loop.run_until_complete(send_update(request_id, "Generated PubMed queries..."))
     # Article Retrieval
     start_api = time.time()
-    deduplicated_articles_collected = collect_articles(query_list, retmax=15) if answer_mode == "heavy" else collect_articles(query_list)
+    retrieval_limit = 15 if answer_mode == "heavy" else 10
+    if retrieval_cutoff_date is None:
+        deduplicated_articles_collected = collect_articles(query_list, retmax=retrieval_limit) if answer_mode == "heavy" else collect_articles(query_list)
+    else:
+        deduplicated_articles_collected = collect_articles(query_list, retmax=retrieval_limit, max_publication_date=retrieval_cutoff_date)
     end_api = time.time()
 
     print("Retrieved Articles")

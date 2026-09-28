@@ -9,6 +9,18 @@ load_dotenv(env)
 
 # Question to Query
 import os
+import logging
+import re
+from datetime import date
+
+def strict_iso_date(value):
+  if not isinstance(value, str) or re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None:
+    return False
+  try:
+    return date.fromisoformat(value).isoformat() == value
+  except ValueError:
+    return False
+
 import pandas as pd
 import time
 import numpy as np
@@ -260,13 +272,14 @@ def exponential_backoff(func, *args, **kwargs):
         return None
 
 #@title article_retrieval
-def article_retrieval(query, retmax=10):
+def article_retrieval(query, retmax=10, max_publication_date=None):
   """
   Retrieves up to 10 of the most relevant PubMed articles per query.
   Note that you will need to input your own Entrez email before running this function.
 
   Parameters:
   - query (str): The user's question.
+  - max_publication_date (str, optional): inclusive PubMed publication date YYYY-MM-DD.
 
   Returns:
   - article_data (list): A list of PubMed articles.
@@ -276,7 +289,15 @@ def article_retrieval(query, retmax=10):
   # log it or attach it to requests to publishers, only Entrez calls.
   Entrez.api_key = os.getenv('NCBI_API_KEY') or None
 
-  search_results = exponential_backoff(Entrez.esearch, db="pubmed", term=query, retmax=retmax, sort="relevance")
+  search_kwargs = {"db": "pubmed", "term": query, "retmax": retmax, "sort": "relevance"}
+  if max_publication_date is not None:
+    from datetime import date
+    try:
+      cutoff = date.fromisoformat(max_publication_date)
+    except (TypeError, ValueError) as exc:
+      raise ValueError("max_publication_date must be an ISO YYYY-MM-DD date") from exc
+    search_kwargs.update({"datetype": "pdat", "maxdate": cutoff.strftime("%Y/%m/%d")})
+  search_results = exponential_backoff(Entrez.esearch, **search_kwargs)
   # search_results = esearch(db="pubmed", term=query, retmax=10, sort="relevance")
   retrieved_ids = Entrez.read(search_results)["IdList"]
 
@@ -286,14 +307,53 @@ def article_retrieval(query, retmax=10):
   articles = exponential_backoff(Entrez.efetch, db="pubmed", id=retrieved_ids, rettype="xml")
   # articles = efetch(db="pubmed", id=retrieved_ids, rettype="xml")
   article_data = Entrez.read(articles)["PubmedArticle"]
+  if max_publication_date is not None:
+      cutoff = date.fromisoformat(max_publication_date)
+      # Use electronic ArticleDate when available, otherwise JournalIssue PubDate.
+      # Never substitute indexing/history dates; exclude incomplete dates.
+      bounded = []
+      for article in article_data:
+          art = article.get("MedlineCitation", {}).get("Article", {})
+          article_dates = art.get("ArticleDate", []) or []
+          if article_dates:
+              pub = article_dates[0]
+          else:
+              journal_pub = art.get("Journal", {}).get("JournalIssue", {}).get("PubDate", {})
+              medline_date = journal_pub.get("MedlineDate")
+              pub = journal_pub if not medline_date else {}
+          year = pub.get("Year")
+          if not year or not str(year).isdigit():
+              continue
+          month = pub.get("Month")
+          day = pub.get("Day")
+          # Precise dates only: do not guess where a year/month-only date falls
+          # relative to the cutoff boundary.
+          if not month or not day:
+              continue
+          try:
+              if str(month).isdigit():
+                  month_num = int(month)
+              else:
+                  import calendar
+                  month_token = str(month).strip().title()
+                  if month_token == "Sept":
+                      month_token = "Sep"
+                  month_num = next(i for i in range(1, 13) if month_token in {calendar.month_name[i], calendar.month_abbr[i]})
+              pub_date = date(int(year), month_num, int(day))
+          except (ValueError, TypeError, StopIteration):
+              continue
+          if pub_date <= cutoff:
+              bounded.append(article)
+      article_data = bounded
+      logging.info("PubMed bounded retrieval: term=%r datetype=PDAT maxdate=%s returned=%d retained=%d pmids=%s", query, max_publication_date, len(retrieved_ids), len(article_data), [str(a.get("MedlineCitation", {}).get("PMID", "")) for a in article_data])
   return article_data
 
 
 #@title collect_articles
-def collect_articles(query_list, retmax=10):
+def collect_articles(query_list, retmax=10, max_publication_date=None):
   """
-  Runs through each of the PubMed queries and aggregates the articles into a single list of lists, where each list element contains up to 10 of the most relevant articles per query.
-  This nested list is then flattened and de-duplicated by PMID.
+  Runs through each PubMed query and de-duplicates by PMID. When max_publication_date is set, every query is bounded to PDAT and results are defensively filtered by ArticleDate, falling back to JournalIssue PubDate.
+  The cutoff must be the review publication date minus one calendar day.
 
   Parameters:
   - query_list (list): List of up to 5 PubMed queries as outputted by the query_generation function.
@@ -306,7 +366,10 @@ def collect_articles(query_list, retmax=10):
   seen_pmids = set()
 
   for query in query_list:
-      article_group = article_retrieval(query, retmax=retmax) if retmax != 10 else article_retrieval(query)
+      if max_publication_date is None:
+          article_group = article_retrieval(query, retmax=retmax) if retmax != 10 else article_retrieval(query)
+      else:
+          article_group = article_retrieval(query, retmax=retmax, max_publication_date=max_publication_date)
       if not article_group:
           continue
 
