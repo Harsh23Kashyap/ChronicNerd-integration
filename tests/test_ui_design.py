@@ -9,11 +9,11 @@ LOGIN_CSS = (ROOT / "dietnerd-website" / "login.css").read_text()
 
 class UiDesignContractTest(unittest.TestCase):
     def test_page_has_semantic_hero_and_workspace(self):
-        self.assertIn('<section class="hero">', HTML)
+        self.assertIn('<section class="chat-panel"', HTML)
         self.assertIn('<main class="chat-shell">', HTML)
         self.assertIn('role="log"', HTML)
         self.assertIn('class="composer"', HTML)
-        self.assertIn('class="evidence-visual"', HTML)
+        self.assertIn('id="sources-panel"', HTML)
 
     def test_controls_keep_the_ids_used_by_javascript(self):
         for element_id in ("conversation-select", "new-conversation", "delete-conversation", "question", "submit"):

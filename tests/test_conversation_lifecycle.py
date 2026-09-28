@@ -66,7 +66,8 @@ if __name__ == '__main__':
 class FrontendUntrustedContentTests(unittest.TestCase):
     def test_answers_are_escaped_before_limited_markdown_rendering(self):
         self.assertIn("const escapeHtml =", FRONT)
-        self.assertIn("let formattedText = escapeHtml(input)", FRONT)
+        self.assertIn("const formatPlainAnswer = text => escapeHtml(text)", FRONT)
+        self.assertIn("fragments.push(formatPlainAnswer(plain.join(", FRONT)
 
     def test_attachment_names_are_built_with_text_nodes(self):
         self.assertIn("existingAttachmentsElement.replaceChildren(...documentNames.map(name => renderAttachmentChip(name)))", FRONT)

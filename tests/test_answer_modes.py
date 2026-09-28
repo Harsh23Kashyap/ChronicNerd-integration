@@ -18,7 +18,7 @@ class AnswerModeEndpointTest(unittest.TestCase):
   with patch.dict(os.environ,{'OPENAI_API_KEY':'test'}),patch.object(main,'_run_research_with_key') as run:
    r=self.client.post('/process_query',json={'user_query':'q','temporary':True,'use_profile':True,'answer_mode':'heavy'})
   self.assertEqual(r.status_code,200,r.text)
-  self.assertFalse(run.call_args.args[-2]);self.assertEqual(run.call_args.args[-1],'heavy')
+  self.assertFalse(run.call_args.args[-3]);self.assertEqual(run.call_args.args[-2],'heavy');self.assertIsNone(run.call_args.args[-1])
   rid=r.json()['request_id']
   with main.request_event_lock:
    for table in (main.request_events,main.request_event_base,main.request_updated_at,main.request_created_at,main.request_owners):table.pop(rid,None)
