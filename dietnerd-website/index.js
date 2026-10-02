@@ -1120,9 +1120,84 @@ document.getElementById('answer-mode').addEventListener('change', event => {
         : 'Light uses the standard research path.';
 });
 let selectedSuggestion = false;
+// Follow-up queue: questions typed while an answer is running wait in order
+// and run one at a time. The queue lives on this page only.
+const QUEUE_LIMIT = 10;
+let questionQueue = [];
+let queuePaused = false;
+function queueStatusHint(text) { document.querySelector('.hint').textContent = text; }
+function enqueueQuestion(question) {
+    if (!question) return false;
+    if (temporaryChat && question.length > 2000) { queueStatusHint('Temporary questions must be 2,000 characters or fewer.'); return false; }
+    if (questionQueue.length >= QUEUE_LIMIT) { queueStatusHint('The queue is full. Remove a question before adding another.'); return false; }
+    questionQueue.push({ id: `q${Date.now()}${Math.random().toString(16).slice(2)}`, question });
+    queueStatusHint('');
+    renderQueue();
+    return true;
+}
+function clearQueue() {
+    questionQueue = [];
+    queuePaused = false;
+    renderQueue();
+}
+function renderQueue() {
+    let box = document.getElementById('message-queue');
+    if (!box) {
+        box = document.createElement('section');
+        box.id = 'message-queue';
+        box.setAttribute('aria-label', 'Queued questions');
+        document.querySelector('.composer-wrap .composer').before(box);
+    }
+    box.replaceChildren();
+    box.hidden = !questionQueue.length;
+    if (!questionQueue.length) return;
+    const heading = document.createElement('div');
+    heading.className = 'queue-heading';
+    const label = document.createElement('small');
+    label.textContent = `${questionQueue.length} queued \u00b7 ${queuePaused ? 'paused' : 'runs after this answer'}`;
+    heading.append(label);
+    if (queuePaused && !questionInFlight) {
+        const resume = document.createElement('button');
+        resume.type = 'button';
+        resume.textContent = 'Resume queue';
+        resume.onclick = () => { queuePaused = false; renderQueue(); drainQueue(); };
+        heading.append(resume);
+    }
+    box.append(heading);
+    for (const item of questionQueue) {
+        const row = document.createElement('div');
+        row.className = 'queue-item';
+        const text = document.createElement('span');
+        text.textContent = item.question;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = '\u00d7';
+        remove.setAttribute('aria-label', `Remove queued question: ${item.question}`);
+        remove.onclick = () => { questionQueue = questionQueue.filter(entry => entry.id !== item.id); renderQueue(); };
+        row.append(text, remove);
+        box.append(row);
+    }
+}
+function drainQueue() {
+    if (questionInFlight || queuePaused || !questionQueue.length) return;
+    const similar = document.getElementById('similarQuestions');
+    if (similar && similar.style.display !== 'none' && similar.children.length) { queuePaused = true; renderQueue(); return; }
+    const item = questionQueue.shift();
+    renderQueue();
+    const input = document.getElementById('question');
+    const draft = input.value;
+    input.value = item.question;
+    document.getElementById('submit').click();
+    input.value = draft;
+}
 function setComposerBusy(busy) {
     questionInFlight = busy;
-    document.getElementById('submit').disabled = busy;
+    const submit = document.getElementById('submit');
+    submit.setAttribute('aria-label', busy ? 'Add question to queue' : 'Send message');
+    submit.title = busy ? 'Add to queue' : '';
+    document.getElementById('question').placeholder = busy ? 'Type your next question. It will wait in the queue.' : 'Message DietNerd...';
+    if (queuePaused || questionQueue.length) renderQueue();
+    if (!busy) window.setTimeout(drainQueue, 0);
     document.getElementById('use-profile').disabled = busy || temporaryChat;
     document.getElementById('answer-mode').disabled = busy;
     document.getElementById('question').setAttribute('aria-busy', busy ? 'true' : 'false');
@@ -1224,6 +1299,7 @@ async function generateAnswer(question) {
         refreshTitleAfterAnswer(getConversationId());
     } catch (err) {
         console.error(err);
+        if (questionQueue.length) queuePaused = true;
         pending.fail(`${err.message || 'Something went wrong.'} Please try again.`, () => generateAnswer(question));
     } finally {
         setComposerBusy(false);
@@ -1303,7 +1379,11 @@ document.getElementById('submit').addEventListener('click', async () => {
     const question = input.value.trim();
     const similarQuestionsContainer = document.getElementById('similarQuestions');
     const hintElement = document.querySelector('.hint');
-    if (questionInFlight) return;
+    if (questionInFlight) {
+        if (!question) { hintElement.textContent = 'Type a question to add it to the queue.'; return; }
+        if (enqueueQuestion(question)) { input.value = ''; input.dispatchEvent(new Event('input', { bubbles: true })); }
+        return;
+    }
     if (!question) {
         hintElement.textContent = 'Please type a question first.';
         return;
@@ -1401,6 +1481,7 @@ document.getElementById('conversation-select').addEventListener('change', async 
         document.getElementById('conversation-select').value = getConversationId() || '';
         return;
     }
+    clearQueue();
     temporaryChat = false;
     clearPaperScope();
     document.body.classList.remove('temporary-mode');
@@ -1452,6 +1533,7 @@ document.getElementById('temporary-chat').addEventListener('click', () => {
 
 document.getElementById('new-conversation').addEventListener('click', () => {
     if (questionInFlight) return;
+    clearQueue();
     document.getElementById('attach-button').disabled = false;
     document.getElementById('existing-attachments').hidden = false;
     document.getElementById('attachment-label').textContent = attachmentExists ? '' : 'No file attached';
