@@ -1,0 +1,46 @@
+# Local stack: MySQL + API + static site.
+#   cp .env.example .env   # fill in keys
+#   docker compose up --build
+# Site: http://localhost:8080   API health: http://localhost:8000/health
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${password:-dietnerd}
+      MYSQL_DATABASE: ${database:-chronicnerd}
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${password:-dietnerd}"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  api:
+    build: ./dietnerd-backend
+    env_file: .env
+    environment:
+      host: db
+      port: "3306"
+      user: root
+      password: ${password:-dietnerd}
+      database: ${database:-chronicnerd}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-http://localhost:8080}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./dietnerd-website:/usr/share/nginx/html:ro
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      - api
+
+volumes:
+  dbdata:

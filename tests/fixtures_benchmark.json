@@ -1,0 +1,28 @@
+{
+  "metadata": {
+    "status": "synthetic-test-fixture-only",
+    "notice": "All items and text are fictional. This is not the private evaluation benchmark. Acceptance/scoring must use the owner-reviewed private benchmark pinned by SHA-256 in its private manifest.",
+    "retrieval_cutoff_policy": "One calendar day before publication date; inclusive PDAT maxdate."
+  },
+  "items": [
+    {
+      "id": "SYNTH-01",
+      "pmid": "00000001",
+      "title": "Synthetic study A",
+      "question": "What does fictional evidence say about synthetic outcome A?",
+      "reference_text": "Synthetic placeholder result A.",
+      "pubmed_article_date": "2024-02-29",
+      "pubmed_publication_date_source": "ArticleDate"
+    },
+    {
+      "id": "SYNTH-02",
+      "pmid": "00000002",
+      "title": "Synthetic study B",
+      "question": "What does fictional evidence say about synthetic outcome B?",
+      "reference_text": "Synthetic placeholder result B.",
+      "pubmed_article_date": "",
+      "pubmed_journal_issue_pub_date": "2020-02-01",
+      "pubmed_publication_date_source": "JournalIssue.PubDate"
+    }
+  ]
+}
