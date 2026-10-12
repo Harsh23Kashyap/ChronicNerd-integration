@@ -1183,15 +1183,16 @@ def extract_doi_wiley(url):
     Returns:
     - doi (str): The extracted DOI of the article. If DOI is not found, it returns an empty string.
     """
-    # Check if 'doi/' is part of the URL
-    if 'doi/' in url:
-        # Split the URL at 'doi/' and return the part after it
-        try:
-            return url.split('doi/')[1]
-        except IndexError:
-            return ""  # Return empty string if 'doi/' is at the end with no DOI after
-    else:
-        return ""  # Return empty string if 'doi/' is not in the URL
+    from urllib.parse import urlsplit, unquote
+
+    path = unquote(urlsplit(url).path)
+    if '/doi/' not in path:
+        return ""
+    identifier = path.split('/doi/', 1)[1]
+    mode, separator, remainder = identifier.partition('/')
+    if mode in {'full', 'abs', 'pdf', 'epdf', 'pdfdirect'} and separator:
+        identifier = remainder
+    return identifier if re.fullmatch(r'10\.\d{4,9}/[^\s]+', identifier) else ""
 
 
 def get_full_text_wiley(url):
