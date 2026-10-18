@@ -679,3 +679,11 @@ html[data-theme=dark] #profile-dialog #profile-clear:hover{background:#563330}
 /* Countdown stays available without competing with the main navigation. */
 #session-countdown{margin-left:3px;opacity:.65;font:500 9px "DM Sans",sans-serif;letter-spacing:0}
 html[data-theme=dark] #session-countdown{color:#a8baad;opacity:.75}
+
+#message-queue{box-sizing:border-box;width:100%;margin:0 0 9px;padding:10px 14px;background:var(--paper);border:1px solid var(--line);border-radius:14px;max-height:170px;overflow:auto;text-align:left}
+#message-queue[hidden]{display:none}
+.queue-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--muted);font-size:11px}
+.queue-heading button{border:0;background:#e9eee6;color:var(--forest);padding:6px 10px;border-radius:8px;font:700 11px "DM Sans";cursor:pointer}
+.queue-item{display:flex;align-items:center;gap:8px;padding:8px 0 0;margin-top:7px;border-top:1px solid var(--line);font-size:12px;line-height:1.5;color:var(--ink)}
+.queue-item span{flex:1;min-width:0;overflow-wrap:anywhere}
+.queue-item button{flex-shrink:0;width:28px;height:28px;border:0;background:transparent;color:var(--muted);font-size:18px;padding:0;cursor:pointer}
