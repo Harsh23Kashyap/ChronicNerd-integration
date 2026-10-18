@@ -1317,6 +1317,7 @@ async function answerFromAttachment(question) {
         refreshTitleAfterAnswer(getConversationId());
     } catch (err) {
         console.error(err);
+        if (questionQueue.length) queuePaused = true;
         pending.fail(`${err.message || 'Something went wrong.'} Please try again.`, () => answerFromAttachment(question));
     } finally {
         setComposerBusy(false);
