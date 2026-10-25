@@ -10,7 +10,7 @@
         const titles = {
             'login-form': 'Sign in', 'register-form': 'Create account',
         };
-        document.title = `DietNerd - ${titles[id]}`;
+        document.title = `DietChat - ${titles[id]}`;
     }
 
     function setBusy(button, busy, label) {

@@ -1,6 +1,1 @@
-window.env = {
-    API_URL: 'http://localhost:8000',
-    EMAILJS_PUBLIC_KEY: 'gFmPbcjw7xdJQHdak',
-    EMAILJS_SERVICE_ID: 'service_dietnerd',
-    EMAILJS_TEMPLATE_ID: 'contact_form'
-}
+window.env = { API_URL: "/api" };

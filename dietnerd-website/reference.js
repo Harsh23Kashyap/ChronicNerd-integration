@@ -2,6 +2,23 @@ const params = new URLSearchParams(window.location.search);
 const pmid = params.get('pmid');
 const target = document.getElementById('reference-content');
 function paragraph(text, parent) { const p=document.createElement('p'); p.textContent=text; parent.append(p); return p; }
+function renderAnalysisText(text, parent) {
+    // Small, safe Markdown subset: bold labels and hyphen bullets. No HTML parsing.
+    const p=document.createElement('p');
+    String(text||'').split('\n').forEach((line,index)=>{
+        if(index) p.append(document.createElement('br'));
+        let clean=line.replace(/^\s*[-*]\s+/, '');
+        if(clean!==line) p.append(document.createTextNode('• '));
+        const bold=/\*\*([^*\n]+)\*\*/g; let cursor=0,match;
+        while((match=bold.exec(clean))!==null){
+            p.append(document.createTextNode(clean.slice(cursor,match.index)));
+            const strong=document.createElement('strong');strong.textContent=match[1];p.append(strong);
+            cursor=bold.lastIndex;
+        }
+        p.append(document.createTextNode(clean.slice(cursor)));
+    });
+    parent.append(p);return p;
+}
 function parseSections(summary) {
     const sections=[]; let active=null;
     for(const line of String(summary||'').split(/\r?\n/)) {
@@ -17,14 +34,14 @@ function render(article) {
     const title=document.createElement('h2');title.textContent=article.title||'Article analysis';head.append(title);
     if(article.citation){const citation=document.createElement('p');citation.className='citation';citation.textContent=article.citation;head.append(citation);}
     const meta=document.createElement('div');meta.className='paper-meta';if(article.pmid){const id=document.createElement('span');id.textContent=`PMID ${article.pmid}`;meta.append(id);}head.append(meta);target.append(head);
-    paragraph('This is an automated paper summary. Check the original article for methods, numbers, and limitations before relying on it.',target).className='reading-note';
+    paragraph(article.analysis_scope === 'PubMed abstract only; no full-text appraisal' ? 'Original PubMed abstract only. This is not an independent full-text appraisal; check the article before relying on its claims.' : 'This is an automated paper summary. Check the original article for methods, numbers, and limitations before relying on it.',target).className='reading-note';
     if(/^https:\/\//i.test(article.url||'')){const link=document.getElementById('read-article');link.href=article.url;link.hidden=false;}
     const summary=String(article.summary||'');
     const invalid=/no content provided|provide the details or text of the research paper|cannot (?:access|summari[sz]e) (?:this|the) (?:research )?paper/i.test(summary);
     const sections=invalid?[]:parseSections(summary);
     if(!sections.length){const empty=document.createElement('div');empty.className='empty-analysis';paragraph(invalid?'The saved analysis does not contain research findings. Read the original article instead.':summary||'An analysis is not available for this article yet. Use Read Article to review the original paper.',empty);target.append(empty);return;}
     const grid=document.createElement('div');grid.className='analysis-grid';
-    sections.forEach(section=>{const block=document.createElement('section');block.className='analysis-section';const h=document.createElement('h3');const number=document.createElement('span');number.className='number';number.textContent=section.number;h.append(number,document.createTextNode(section.title));block.append(h);paragraph(section.lines.join('\n'),block);grid.append(block);});target.append(grid);
+    sections.forEach(section=>{const block=document.createElement('section');block.className='analysis-section';const h=document.createElement('h3');const number=document.createElement('span');number.className='number';number.textContent=section.number;h.append(number,document.createTextNode(section.title));block.append(h);renderAnalysisText(section.lines.join('\n'),block);grid.append(block);});target.append(grid);
 }
 async function load(){
     if(!pmid||!/^\d{1,12}$/.test(pmid)){target.textContent='Choose an article from the Sources list to view its analysis.';return;}

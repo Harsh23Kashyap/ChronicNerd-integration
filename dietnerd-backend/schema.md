@@ -25,6 +25,7 @@ and retains the old summary table as a backup for verification.
 | `title` | VARCHAR(255) | Initial question, truncated to 120 characters |
 | `next_query_number` | INT | Next turn number, allocated under a row lock |
 | `title_locked` | TINYINT(1) | User rename prevents automatic title updates |
+| `use_profile` | TINYINT(1) | Whether this saved conversation uses account profile context; defaults on |
 | `created_at` | TIMESTAMP | Creation time |
 | `updated_at` | TIMESTAMP | Last turn/update time |
 
@@ -96,15 +97,19 @@ One optional row per user: the self-reported diet profile used to personalize an
 | `age_range` | VARCHAR(40) | One of a fixed list, or empty |
 | `goals` | VARCHAR(300) | Free text, or empty |
 | `conditions` | VARCHAR(300) | Free text, or empty |
+| `additional_notes` | TEXT | Optional free text, max 1,000 characters enforced by API |
 | `updated_at` | TIMESTAMP | Last save |
 
-All three content fields empty deletes the row (Clear profile). Existing
+All four content fields empty deletes the row (Clear profile). Existing
 databases apply `migrations/002_diet_profile.sql`; fresh databases create the
-table at startup.
+table at startup. The app adds `additional_notes` on startup when missing; the
+migration is `migrations/004_profile_notes.sql`. Existing conversations gain
+`use_profile` via `migrations/003_conversation_profile.sql` or startup migration.
 
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/profile` | GET | Read the caller's profile (empty strings when unset) |
 | `/profile` | PUT | Save or clear the caller's profile |
+| `/conversations/{conversation_id}/profile` | PUT | Enable or disable profile for one owned saved conversation |
 
 Existing databases apply `migrations/003_conversation_rename.sql` before deploying the rename API. Fresh databases get `title_locked` on startup.

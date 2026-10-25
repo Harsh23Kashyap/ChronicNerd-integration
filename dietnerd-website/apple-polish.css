@@ -1,0 +1,56 @@
+/* Apple-style polish layer (WWDC "Designing Fluid Interfaces", translated for the web).
+   Loaded last. Presentation only: no markup or behavior changes. */
+:root{--spring:cubic-bezier(.32,.72,0,1);--tap:cubic-bezier(.2,0,0,1)}
+
+/* Response: feedback on press, instantly; settle with a spring-like curve */
+button,a,summary,.composer,.conversation-list a,.conversation-list button{transition-timing-function:var(--spring);transition-duration:240ms}
+button:not(:disabled):active,summary:active{transform:scale(.97)!important;transition-duration:80ms!important;transition-timing-function:var(--tap)!important}
+a:active{opacity:.7;transition-duration:60ms}
+
+/* Typography: tight tracking on display text, open leading on reading text */
+h1,h2,.brand,.chat-title{letter-spacing:-.02em}
+h1{line-height:1.1}
+.chat-shell p,.message-content{line-height:1.6}
+.chat-sidebar h2,.chat-sidebar h3,.sidebar-label{letter-spacing:.07em}
+.composer-meta,small{letter-spacing:.01em}
+body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+
+/* Materials: translucent header, sidebar and composer; scroll-edge fade instead of hard dividers */
+.chat-header{background:color-mix(in srgb,var(--paper,#fdfcf7) 78%,transparent)!important;-webkit-backdrop-filter:saturate(1.6) blur(20px);backdrop-filter:saturate(1.6) blur(20px);position:relative;z-index:2;border-bottom-color:transparent!important;box-shadow:0 1px 0 rgba(23,63,53,.07)}
+.chat-sidebar{background:color-mix(in srgb,#e9efe6 80%,transparent)!important;-webkit-backdrop-filter:saturate(1.5) blur(24px);backdrop-filter:saturate(1.5) blur(24px)}
+.composer-wrap{border-top-color:transparent!important;background:linear-gradient(to bottom,transparent,color-mix(in srgb,var(--paper,#fdfcf7) 92%,transparent) 28%)!important;position:relative}
+.composer-wrap::before{content:"";position:absolute;left:0;right:0;top:-28px;height:28px;background:linear-gradient(to bottom,transparent,color-mix(in srgb,var(--paper,#fdfcf7) 88%,transparent));pointer-events:none}
+.composer{background:color-mix(in srgb,#fbfaf4 82%,transparent)!important;-webkit-backdrop-filter:saturate(1.5) blur(18px);backdrop-filter:saturate(1.5) blur(18px);box-shadow:0 1px 2px rgba(23,63,53,.06),0 14px 34px -10px rgba(23,63,53,.2)!important}
+.composer:focus-within{box-shadow:0 0 0 3px rgba(23,63,53,.14),0 18px 40px -10px rgba(23,63,53,.24)!important}
+
+/* Materialize: dialogs arrive with scale and blur together, leave along the same path */
+@keyframes ap-in{from{opacity:0;transform:scale(.96) translateY(6px);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
+dialog[open]{animation:ap-in 320ms var(--spring)}
+dialog::backdrop{-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+
+/* Focus: visible, calm ring */
+:focus-visible{outline:2px solid rgba(23,63,53,.5);outline-offset:2px}
+
+/* Accessibility */
+@media (prefers-reduced-motion:reduce){
+ *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+ button:not(:disabled):active{transform:none!important}
+}
+@media (prefers-reduced-transparency:reduce){
+ .chat-header,.chat-sidebar,.composer{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+ .chat-header{background:#fdfcf7!important}.chat-sidebar{background:#e9efe6!important}.composer{background:#fbfaf4!important}
+}
+@media (prefers-contrast:more){
+ .composer,dialog,.chat-sidebar{border:1px solid currentColor!important}
+}
+
+/* Dark theme: keep the same materials, on dark surfaces */
+html[data-theme=dark] .chat-header{background:rgba(24,30,28,.72)!important;box-shadow:0 1px 0 rgba(255,255,255,.07)}
+html[data-theme=dark] .chat-sidebar{background:rgba(26,33,30,.78)!important}
+html[data-theme=dark] .composer-wrap{background:linear-gradient(to bottom,transparent,rgba(20,26,24,.92) 28%)!important}
+html[data-theme=dark] .composer-wrap::before{background:linear-gradient(to bottom,transparent,rgba(20,26,24,.88))}
+html[data-theme=dark] .composer{background:rgba(32,40,37,.8)!important;box-shadow:0 1px 2px rgba(0,0,0,.3),0 14px 34px -10px rgba(0,0,0,.5)!important}
+html[data-theme=dark] :focus-visible{outline-color:rgba(215,239,114,.6)}
+
+/* Composer shows its own focus ring via :focus-within; skip the inner outline */
+.composer :focus-visible{outline:none}

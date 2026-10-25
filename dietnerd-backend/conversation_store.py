@@ -11,7 +11,7 @@ def append_turn(connection_factory, email, conversation_id, entry):
         connection.start_transaction()
         cursor.execute(
             "SELECT next_query_number FROM conversations "
-            "WHERE conversation_id = %s AND email = %s FOR UPDATE",
+            "WHERE conversation_id = %s AND email = %s AND deleted_at IS NULL FOR UPDATE",
             (conversation_id, email),
         )
         row = cursor.fetchone()
@@ -25,8 +25,8 @@ def append_turn(connection_factory, email, conversation_id, entry):
         )
         cursor.execute(
             "INSERT INTO user_session_memory "
-            "(email, conversation_id, query_number, request_id, raw_question, standalone_question, answer, sources_json) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            "(email, conversation_id, query_number, request_id, raw_question, standalone_question, answer, sources_json, research_audit_json) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (
                 email,
                 conversation_id,
@@ -36,6 +36,7 @@ def append_turn(connection_factory, email, conversation_id, entry):
                 entry.get("standalone_question"),
                 entry.get("answer"),
                 json.dumps(entry.get("sources") or []),
+                json.dumps(entry.get("research_audit")),
             ),
         )
         connection.commit()

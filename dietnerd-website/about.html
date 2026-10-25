@@ -1,66 +1,82 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>About ChronicNerd - DietNerd</title>
-    <link rel="stylesheet" type="text/css" href="about.css">
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="home-transition.css">
-    <script src="theme.js"></script>
+<meta charset="utf-8"/>
+<link href="assets/dietchat_mark.svg" rel="icon" type="image/svg+xml"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>About DietChat</title>
+<link href="about.css" rel="stylesheet" type="text/css"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=Fraunces:opsz,wght@9..144,600;9..144,700&amp;display=swap" rel="stylesheet"/>
+<link href="home-transition.css" rel="stylesheet"/>
+<script src="theme.js"></script>
 </head>
 <body>
-    <nav class="toolbar" aria-label="Primary navigation">
-        <a class="brand" href="index.html"><img src="assets/dietnerd_dialogue.svg" alt="DietNerd"></a>
-        <div class="nav-links">
-            <a href="index.html">Home</a>
-            <a class="active" href="about.html" aria-current="page">About</a>
-            <a href="contact.html">Contact</a>
-        <button type="button" data-theme-toggle class="theme-toggle">Dark mode</button></div>
-    </nav>
-
-    <main>
-        <section class="about-hero">
-            <div class="hero-copy">
-                <span class="eyebrow">About ChronicNerd</span>
-                <h1>Research context for<br><em>better health conversations.</em></h1>
-                <p>ChronicNerd is the conversational DietNerd project in the CustomNerd research family. It provides evidence-based diet and nutrition answers while preserving durable conversations, rolling summaries, follow-up context, and user document uploads.</p>
-            </div>
-            <div class="evidence-mark" aria-hidden="true">
-                <div class="orbit orbit-one"></div>
-                <div class="orbit orbit-two"></div>
-                <div class="mark-core"><span>Evidence</span><strong>made clear</strong></div>
-                <i class="node node-one"></i><i class="node node-two"></i><i class="node node-three"></i>
-            </div>
-        </section>
-
-
-        <section class="story-grid" aria-labelledby="how-it-works">
-            <div>
-                <span class="section-kicker">How it works</span>
-                <h2 id="how-it-works">From a question to published evidence.</h2>
-            </div>
-            <p>DietNerd searches peer-reviewed research from PubMed and presents a clear answer alongside article-level analysis. Live progress makes the research path visible, while source summaries help people understand each study and open the original paper for more context.</p>
-        </section>
-
-        <section class="team-section" aria-labelledby="team-title">
-            <span class="section-kicker">The people behind the project</span>
-            <h2 id="team-title">Meet our team</h2>
-            <div class="team-grid">
-                <article class="team-card">
-                    <span class="initials">HK</span>
-                    <h3>Harsh Kashyap</h3>
-                    <p>Thapar Institute of Engineering and Technology<br>Patiala, India</p>
-                </article>
-                <article class="team-card">
-                    <span class="initials">DS</span>
-                    <h3>Professor Dennis Shasha</h3>
-                    <p>Department of Computer Science<br>New York University, New York, USA</p>
-                </article>
-            </div>
-        </section>
-    </main>
-<div id="home-transition" class="home-transition" role="status" aria-live="polite" hidden><div class="home-transition-emblem" aria-hidden="true"><span class="home-transition-orbit"></span><img src="assets/dietnerd_dialogue.svg" alt=""></div><strong>Opening DietNerd</strong><span class="home-transition-track" aria-hidden="true"></span></div>
+<nav aria-label="Primary navigation" class="toolbar">
+<a class="brand" href="index.html"><img alt="DietChat" src="assets/dietchat_logo.svg"/></a>
+<div class="nav-links">
+<a href="index.html">Home</a>
+<a aria-current="page" class="active" href="about.html">About</a>
+<a href="#features-title">Features</a>
+<a href="contact.html">Contact</a>
+<a href="https://dietnerd.org/">DietNerd.org ↗</a>
+<button aria-label="Switch to dark mode" class="theme-toggle" data-theme-toggle="" title="Switch to dark mode" type="button"><span aria-hidden="true" class="theme-sky"><span class="theme-orb"></span><span class="theme-cloud"></span></span></button></div>
+</nav>
+<main>
+<section class="about-hero">
+<div class="hero-copy">
+<span class="eyebrow">About DietChat</span>
+<h1>Research context for<br/><em>better health conversations.</em></h1>
+<p>DietChat is the conversational companion to DietNerd. It is part of the CustomNerd research family. It helps you explore diet and nutrition questions with article links, food data, saved conversations, follow-up context and optional documents. Research answers can be incomplete; check source details before using them for health decisions.</p>
+</div>
+<div aria-hidden="true" class="evidence-mark">
+<div class="orbit orbit-one"></div>
+<div class="orbit orbit-two"></div>
+<div class="mark-core"><span>Evidence</span><strong>made clear</strong></div>
+<i class="node node-one"></i><i class="node node-two"></i><i class="node node-three"></i>
+</div>
+</section>
+<section aria-labelledby="how-it-works" class="story-grid">
+<div>
+<span class="section-kicker">How it works</span>
+<h2 id="how-it-works">From a question to published evidence.</h2>
+</div>
+<p>DietChat searches PubMed records and shows the research journey as it runs. Where an article is resolved, you can open its Article Analysis and original record. A retrieved paper is not proof that a particular claim is supported. The food-comparison lane uses FoodData Central records and links each food to its USDA source.</p>
+</section>
+<section aria-labelledby="features-title" class="feature-section">
+<div class="feature-intro"><span class="section-kicker">What DietChat does</span><h2 id="features-title">Features</h2><h3 class="feature-subhead">Research, without losing the thread.</h3><p>Small previews of the tools you can use in DietChat. These are illustrations, not live answers or medical advice.</p></div>
+<div class="feature-grid">
+<article class="feature-card feature-wide"><div class="feature-copy"><span class="feature-index">01 / CONVERSATIONS</span><h3>Pick up where you left off.</h3><p>Saved chats can receive short AI topic titles after the answer; rename any conversation yourself. Search your own history, expand a chat to preview each question-answer pair, or delete a pair or whole conversation with a 30-second Undo. Temporary chat stays out of saved history.</p></div><div aria-label="Illustration of saved and temporary chat" class="feature-demo chat-demo"><svg aria-hidden="true" class="feature-illustration" focusable="false" viewbox="0 0 280 62"><path class="draw-path" d="M28 15H113Q123 15 123 25V35Q123 45 113 45H62L47 55V45H28Q18 45 18 35V25Q18 15 28 15Z"></path><path class="draw-path draw-later" d="M168 7H248Q260 7 260 19V31Q260 43 248 43H206L190 53V43H168Q156 43 156 31V19Q156 7 168 7Z"></path><path class="svg-detail" d="M36 27H94M36 34H78M173 20H238M173 27H222"></path></svg><div class="mini-sidebar"><span>Conversations</span><span class="mini-search">Search conversations</span><span class="mini-active">How much protein do I need? +</span><span class="mini-row">How can I get enough iron? +</span><small>Pair or full-chat delete · Undo 30s</small></div><div class="mini-chat"><span class="mini-mode">Saved conversation</span><p class="mini-question">How much protein do I need?</p><p class="mini-answer">Let's look at your goal and the research.</p><button aria-pressed="false" class="mini-temp-toggle" type="button">Preview temporary chat</button></div></div></article>
+<article class="feature-card"><div class="feature-copy"><span class="feature-index">02 / RESEARCH</span><h3>See the work as it happens.</h3><p>The journey moves as retrieval and analysis events arrive. Choose Light for standard research or Heavy for longer experimental research. Heavy is available but its answers are not yet source-verified and may withhold a target when support cannot be checked. Where a source is resolved, open Article Analysis or its original record. You can also view the research steps and optional claim-source notes; a citation alone does not verify its claim.</p></div><div aria-label="Illustration of research stages" class="feature-demo journey-demo"><svg aria-hidden="true" class="feature-illustration" focusable="false" viewbox="0 0 280 62"><path class="draw-path" d="M22 32H258"></path><circle class="svg-node" cx="26" cy="32" r="8"></circle><circle class="svg-node svg-node-delayed" cx="100" cy="32" r="8"></circle><circle class="svg-node svg-node-delayed" cx="180" cy="32" r="8"></circle><circle class="svg-node svg-node-delayed" cx="254" cy="32" r="8"></circle><path class="svg-detail" d="m23 32 3 3 5-7m66 4 3 3 5-7m77-3 8 8m0-8-8 8"></path></svg><span class="mini-label">Research journey</span><ol><li class="complete">Question</li><li class="complete">Find studies</li><li class="current">Check studies</li><li>Answer</li></ol><span class="mini-source">[1] Study title · View article analysis ↗</span></div></article>
+<article class="feature-card"><div class="feature-copy"><span class="feature-index">03 / YOUR CONTEXT</span><h3>Add what matters to you.</h3><p>Set an optional diet profile with goals, conditions, weight and dietary preferences in the notes. Attach a document or ask about a specific paper. Switch profile use on or off per conversation, and change or clear your profile later.</p></div><div aria-label="Illustration of optional diet profile" class="feature-demo profile-demo"><svg aria-hidden="true" class="feature-illustration" focusable="false" viewbox="0 0 280 62"><path class="draw-path" d="M35 8H245Q253 8 253 16V46Q253 54 245 54H35Q27 54 27 46V16Q27 8 35 8Z"></path><path class="svg-detail" d="M46 23H118M46 37H104M140 23H230M140 37H215"></path><circle class="svg-node" cx="132" cy="23" r="4"></circle><circle class="svg-node svg-node-delayed" cx="122" cy="37" r="4"></circle></svg><span class="mini-label">Diet profile · optional</span><span class="mini-field">Goal <strong>Build muscle</strong></span><span class="mini-field">Context <strong>Vegetarian meals</strong></span><span class="mini-chip">+ Attach PDF</span><span class="mini-chip">Ask about a paper</span></div></article>
+<article class="feature-card"><div class="feature-copy"><span class="feature-index">04 / COMPARE</span><h3>See the numbers another way.</h3><p>Where an answer contains a suitable numeric table, you can view it as a chart and return to the table. Ask for a five-food comparison of chicken breast, paneer, tofu, lentils and eggs. DietChat shows protein and fiber per 100 g in a table, with separate charts and links to each FoodData Central record. Values refer to the named preparations, not every variety of those foods.</p></div><div aria-label="Illustrative fiber table and chart" class="feature-demo comparison-demo"><svg aria-hidden="true" class="feature-illustration" focusable="false" viewbox="0 0 280 62"><path class="draw-path" d="M28 49V10M28 49H260"></path><path class="draw-path draw-later" d="M50 43H113V34H50ZM50 25H213V16H50Z"></path><path class="svg-detail" d="M220 20H248M120 38H145"></path></svg><span class="mini-label">Fiber (g per 100 g) · illustration</span><button aria-pressed="false" class="mini-chart-toggle" type="button">View as chart</button><div class="mini-table"><span>Food</span><span>Fiber (g)</span><span>Tofu</span><span>2.3</span><span>Lentils</span><span>7.9</span></div><div class="mini-chart" hidden=""><span>Tofu <i style="--bar:29%"></i>2.3</span><span>Lentils <i style="--bar:100%"></i>7.9</span></div></div></article>
+<article class="feature-card"><div class="feature-copy"><span class="feature-index">05 / TAKE IT WITH YOU</span><h3>Keep a useful answer.</h3><p>Copy an answer or download a readable saved-conversation PDF with questions, tables and page numbers.</p></div><div aria-label="Illustration of copy and PDF download" class="feature-demo export-demo"><svg aria-hidden="true" class="feature-illustration" focusable="false" viewbox="0 0 280 62"><path class="draw-path" d="M35 8H164L183 27V52H35Z"></path><path class="svg-detail" d="M51 24H133M51 33H161M51 42H143"></path><path class="draw-path draw-later" d="M219 14V43m-11-10 11 10 11-10M199 49H240"></path></svg><span class="mini-label">Answer</span><p>Compare the evidence, then ask a follow-up.</p><div class="mini-actions"><button class="mini-copy" type="button">Copy answer</button><span>Download PDF ↓</span></div></div></article>
+<article class="feature-card feature-wide"><div class="feature-copy"><span class="feature-index">06 / FOLLOW-UP</span><h3>Talk it through naturally.</h3><p>Ask follow-ups in the same thread with recent question context, not earlier answers treated as source evidence. On supported browsers, tap the microphone to dictate into the composer, see listening and transcript status, then edit the text before sending. If recognition is unavailable, type instead. Sending always takes a separate action.</p></div><div aria-label="Illustration of a follow-up composer" class="feature-demo followup-demo"><svg aria-hidden="true" class="feature-illustration" focusable="false" viewbox="0 0 280 62"><path class="draw-path" d="M31 12H147Q158 12 158 23V39Q158 50 147 50H82L67 59V50H31Q20 50 20 39V23Q20 12 31 12Z"></path><path class="draw-path draw-later" d="M174 30H236m-9-9 9 9-9 9"></path><path class="svg-detail" d="M41 26H132M41 36H108"></path></svg><p>What about someone who avoids dairy?</p><div class="mini-compose"><span>Ask a follow-up...</span><span aria-hidden="true">♩   ↑</span></div><small>Voice fills the box. Sending is a separate step.</small></div></article>
+</div>
+<div aria-label="More DietChat tools" class="feature-more"><span class="section-kicker">And more</span><div class="feature-more-grid"><article class="feature-card feature-more-card"><div class="feature-copy"><span class="feature-index">07 / MORE TOOLS</span><h3>AI topic titles after an answer, manual rename and + expansion</h3></div><div aria-hidden="true" class="feature-more-art"><svg class="feature-illustration" focusable="false" viewbox="0 0 280 62"><rect class="draw-path" height="37" rx="8" width="164" x="34" y="12"></rect><path class="draw-path draw-later" d="M47 23h106M47 33h73"></path><path class="svg-detail" d="m201 16 14 14-14 14m-11-14h25M169 41l24-24"></path><circle class="svg-node svg-node-delayed" cx="169" cy="41" r="3"></circle></svg></div></article><article class="feature-card feature-more-card"><div class="feature-copy"><span class="feature-index">08 / MORE TOOLS</span><h3>Voice dictation on supported browsers</h3></div><div aria-hidden="true" class="feature-more-art"><svg class="feature-illustration" focusable="false" viewbox="0 0 280 62"><rect class="draw-path" height="32" rx="10" width="20" x="119" y="7"></rect><path class="draw-path draw-later" d="M106 28c0 17 11 24 23 24s23-7 23-24M129 52v9m-18 0h36"></path><path class="svg-detail" d="M59 32h15l5-11 8 25 7-14h10m59 0h9l6-11 7 24 5-13h17"></path></svg></div></article><article class="feature-card feature-more-card"><div class="feature-copy"><span class="feature-index">09 / MORE TOOLS</span><h3>Delete individual question-answer pairs with Undo</h3></div><div aria-hidden="true" class="feature-more-art"><svg class="feature-illustration" focusable="false" viewbox="0 0 280 62"><path class="draw-path" d="M28 13h83a9 9 0 0 1 9 9v18a9 9 0 0 1-9 9H62l-15 9v-9H28a9 9 0 0 1-9-9V22a9 9 0 0 1 9-9z"></path><path class="draw-path draw-later" d="M163 25h83v27h-83zM144 38h19"></path><path class="svg-detail" d="M41 26h52M41 36h31m110 4h44m-30-27-9 9 9 9"></path><circle class="svg-node svg-node-delayed" cx="237" cy="16" r="5"></circle></svg></div></article><article class="feature-card feature-more-card"><div class="feature-copy"><span class="feature-index">10 / MORE TOOLS</span><h3>Delete full conversations with Undo</h3></div><div aria-hidden="true" class="feature-more-art"><svg class="feature-illustration" focusable="false" viewbox="0 0 280 62"><rect class="draw-path" height="46" rx="8" width="164" x="45" y="9"></rect><path class="draw-path draw-later" d="M60 21h91M60 32h117M60 43h74"></path><path class="svg-detail" d="M232 17a19 19 0 1 1-7-7m7-11v18h-18"></path><circle class="svg-node svg-node-delayed" cx="233" cy="48" r="3"></circle></svg></div></article><article class="feature-card feature-more-card"><div class="feature-copy"><span class="feature-index">11 / MORE TOOLS</span><h3>Choose light or dark theme</h3></div><div aria-hidden="true" class="feature-more-art"><svg class="feature-illustration" focusable="false" viewbox="0 0 280 62"><circle class="draw-path" cx="81" cy="31" r="15"></circle><path class="svg-detail" d="M81 4v8m0 38v8M54 31h8m38 0h8M62 12l6 6m26 26 6 6m0-38-6 6M68 44l-6 6"></path><path class="draw-path draw-later" d="M181 10a22 22 0 1 0 25 31 23 23 0 0 1-25-31z"></path><path class="svg-detail" d="M138 31h20"></path></svg></div></article><article class="feature-card feature-more-card"><div class="feature-copy"><span class="feature-index">12 / MORE TOOLS</span><h3>Light research; Heavy experimental and not yet source-verified</h3></div><div aria-hidden="true" class="feature-more-art"><svg class="feature-illustration" focusable="false" viewbox="0 0 280 62"><rect class="draw-path" height="31" rx="15" width="88" x="32" y="17"></rect><rect class="draw-path draw-later" height="31" rx="15" width="90" x="158" y="17"></rect><path class="svg-detail" d="M56 32h39m82 0h14m9-6v12m9-17v22m9-15v8m9-20v32M120 32h38"></path><circle class="svg-node svg-node-delayed" cx="138" cy="32" r="4"></circle></svg></div></article><article class="feature-card feature-more-card"><div class="feature-copy"><span class="feature-index">13 / MORE TOOLS</span><h3>Open article analysis and original sources</h3></div><div aria-hidden="true" class="feature-more-art"><svg class="feature-illustration" focusable="false" viewbox="0 0 280 62"><path class="draw-path" d="M55 8h93l23 22v30H55zM148 8v22h23"></path><path class="svg-detail" d="M70 28h60M70 40h80M70 51h54"></path><path class="draw-path draw-later" d="M198 20h42v31h-42m-34-16h45"></path><circle class="svg-node svg-node-delayed" cx="208" cy="35" r="4"></circle></svg></div></article><article class="feature-card feature-more-card"><div class="feature-copy"><span class="feature-index">14 / MORE TOOLS</span><h3>Show optional claim evidence</h3></div><div aria-hidden="true" class="feature-more-art"><svg class="feature-illustration" focusable="false" viewbox="0 0 280 62"><path class="draw-path" d="M33 43 87 17 136 35 192 12 246 38"></path><path class="draw-path draw-later" d="M50 53h179"></path><circle class="svg-node svg-node-delayed" cx="33" cy="43" r="5"></circle><circle class="svg-node svg-node-delayed" cx="87" cy="17" r="5"></circle><circle class="svg-node svg-node-delayed" cx="136" cy="35" r="5"></circle><circle class="svg-node svg-node-delayed" cx="192" cy="12" r="5"></circle><circle class="svg-node svg-node-delayed" cx="246" cy="38" r="5"></circle><path class="svg-detail" d="M87 25v19m105-24v25"></path></svg></div></article><article class="feature-card feature-more-card"><div class="feature-copy"><span class="feature-index">15 / MORE TOOLS</span><h3>Review or clear your diet profile</h3></div><div aria-hidden="true" class="feature-more-art"><svg class="feature-illustration" focusable="false" viewbox="0 0 280 62"><circle class="draw-path" cx="84" cy="20" r="11"></circle><path class="draw-path draw-later" d="M57 54c0-14 11-22 27-22s27 8 27 22zM148 12h92v43h-92z"></path><path class="svg-detail" d="M161 23h52m-52 11h65m-65 11h36m39-4 12 12m0-12-12 12"></path></svg></div></article><article class="feature-card feature-more-card"><div class="feature-copy"><span class="feature-index">16 / MORE TOOLS</span><h3>Research from PDF, text and CSV attachments</h3></div><div aria-hidden="true" class="feature-more-art"><svg class="feature-illustration" focusable="false" viewbox="0 0 280 62"><path class="draw-path" d="M24 10h58l13 13v36H24zM82 10v13h13M107 10h58l13 13v36h-71zM165 10v13h13M190 10h58l13 13v36h-71zM248 10v13h13"></path><path class="svg-detail" d="M35 41h45m38 0h45m38 0h45M35 49h31m52 0h32m52 0h31"></path></svg></div></article><article class="feature-card feature-more-card"><div class="feature-copy"><span class="feature-index">17 / MORE TOOLS</span><h3>Ask follow-up questions with recent context; see sending feedback</h3></div><div aria-hidden="true" class="feature-more-art"><svg class="feature-illustration" focusable="false" viewbox="0 0 280 62"><path class="draw-path" d="M27 12h113v29H57l-17 12V41H27z"></path><path class="draw-path draw-later" d="M155 24h99v30h-73l-16 9v-9h-10z"></path><path class="svg-detail" d="M39 23h75M39 31h49m78 5h70m-70 8h43"></path><circle class="svg-node svg-node-delayed" cx="143" cy="40" r="4"></circle></svg></div></article><article class="feature-card feature-more-card"><div class="feature-copy"><span class="feature-index">18 / MORE TOOLS</span><h3>Five-food protein/fiber table and separate charts with USDA record links</h3></div><div aria-hidden="true" class="feature-more-art"><svg class="feature-illustration" focusable="false" viewbox="0 0 280 62"><path class="draw-path" d="M32 51V12m0 39h136m-116-2V33h18v16m18 0V20h18v29m18 0V27h18v22"></path><path class="draw-path draw-later" d="M197 10h51v46h-51z"></path><path class="svg-detail" d="M207 22h31m-31 10h31m-31 10h21"></path><circle class="svg-node svg-node-delayed" cx="189" cy="33" r="3"></circle></svg></div></article></div></div>
+<a class="feature-cta" href="index.html">Open DietChat <span aria-hidden="true">→</span></a>
+</section>
+<section aria-labelledby="team-title" class="team-section">
+<span class="section-kicker">The people behind the project</span>
+<h2 id="team-title">Meet our team</h2>
+<div class="team-grid">
+<article class="team-card">
+<img alt="Harsh Kashyap" class="team-photo" height="84" loading="lazy" src="assets/harsh.jpg" width="84"/>
+<h3>Harsh Kashyap</h3>
+<p>Thapar Institute of Engineering and Technology<br/>Patiala, India</p>
+<a class="team-link" href="https://www.linkedin.com/in/harsh-kashyap/" rel="noopener noreferrer" target="_blank">LinkedIn <span aria-hidden="true">↗</span></a>
+</article>
+<article class="team-card">
+<img alt="Professor Dennis Shasha" class="team-photo" height="84" loading="lazy" src="assets/dennis.jpg" width="84"/>
+<h3>Professor Dennis Shasha</h3>
+<p>Department of Computer Science<br/>New York University, New York, USA</p>
+<a class="team-link" href="https://cs.nyu.edu/~shasha/" rel="noopener noreferrer" target="_blank">NYU faculty page <span aria-hidden="true">↗</span></a>
+</article>
+</div>
+</section>
+</main>
+<div aria-live="polite" class="home-transition" hidden="" id="home-transition" role="status"><div aria-hidden="true" class="home-transition-emblem"><span class="home-transition-orbit"></span><img alt="" src="assets/dietchat_logo.svg"/></div><strong>Opening DietChat</strong><span aria-hidden="true" class="home-transition-track"></span></div>
 <script src="home-transition.js"></script>
+<script src="about-features.js"></script>
 </body>
 </html>

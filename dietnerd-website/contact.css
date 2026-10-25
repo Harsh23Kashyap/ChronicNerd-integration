@@ -13,3 +13,12 @@ html[data-theme=dark] .nav-links a:hover,html[data-theme=dark] .nav-links a:focu
 html[data-theme=dark] input,html[data-theme=dark] textarea,html[data-theme=dark] select{background:#1f2b24;color:#eaf3ec;border-color:var(--line)}
 html[data-theme=dark] .eyebrow{color:#173f35}
 @media(max-width:520px){.toolbar{height:auto;min-height:68px;display:flex;flex-wrap:wrap;gap:8px;padding:9px 16px}.toolbar .nav-links{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:0}.toolbar .nav-links a{padding:7px 6px;font-size:12px}.toolbar .theme-toggle{white-space:nowrap;padding:6px 8px;font-size:10px}}
+
+/* Accessible sun/moon switch; clouds cross the orb on change only. */
+.theme-toggle{display:inline-grid!important;place-items:center!important;width:43px!important;height:35px!important;min-width:43px!important;padding:0!important;overflow:hidden!important;position:relative!important;vertical-align:middle!important}
+.theme-toggle:focus-visible{outline:3px solid var(--forest-2,#255b4d)!important;outline-offset:2px}
+.theme-sky{width:27px;height:23px;position:relative;display:block}.theme-orb{position:absolute;left:7px;top:4px;width:16px;height:16px;border-radius:50%;background:#d99b49;box-shadow:0 0 0 3px #d99b4930;transition:background .32s,box-shadow .32s,transform .32s}
+.theme-cloud{position:absolute;left:-11px;top:11px;width:17px;height:6px;border-radius:8px;background:var(--paper);box-shadow:7px -3px 0 -1px var(--paper);opacity:0;pointer-events:none}
+html[data-theme=dark] .theme-orb{background:#dce5df;box-shadow:inset -5px -2px 0 #7e9b8c;transform:rotate(-18deg)}
+.theme-toggle.theme-just-changed .theme-cloud{animation:cloud-cross .4s ease-out both}@keyframes cloud-cross{0%{transform:translateX(0);opacity:0}30%{opacity:.9}100%{transform:translateX(47px);opacity:0}}
+@media(prefers-reduced-motion:reduce){.theme-orb{transition:none}.theme-toggle.theme-just-changed .theme-cloud{animation:none}}

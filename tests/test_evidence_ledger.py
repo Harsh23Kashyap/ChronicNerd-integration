@@ -16,6 +16,7 @@ class LedgerTest(unittest.TestCase):
         row, = build_claim_evidence_ledger(answer, [source])
         self.assertEqual(row['source_url'], source['url'])
         self.assertEqual(row['support_status'], 'not independently verified')
+        self.assertIn('does not verify the claim', row['evidence_note'])
         self.assertIsNone(row['evidence_passage'])
         self.assertIsNone(row['population'])
 

@@ -101,7 +101,7 @@ body:after{display:none}
 #container,body.conversation-mode #container{flex:1 1 auto;min-height:0;width:min(1380px,calc(100% - 32px));margin:0 auto;padding:12px 0 16px}
 .hero{display:none}
 .chat-shell,body.conversation-mode .chat-shell{height:100%;min-height:0;max-height:none;margin:0;border-radius:14px;grid-template-columns:250px minmax(0,1fr);box-shadow:0 4px 24px rgba(23,63,53,.06)}
-.chat-panel,body.conversation-mode .chat-panel{height:100%;min-height:0;max-height:none;grid-template-rows:56px minmax(0,1fr) auto auto auto}
+.chat-panel,body.conversation-mode .chat-panel{height:100%;min-height:0;max-height:none;grid-template-rows:56px minmax(0,1fr) auto auto auto auto}
 .chat-header,.conversation-mode .chat-header{height:56px;padding:0 clamp(18px,3vw,36px)}
 .chat-thread,.conversation-mode .chat-thread{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:24px clamp(18px,4vw,54px)}
 .welcome-message{min-height:100%;width:100%;max-width:680px;align-items:center;justify-content:center}
@@ -457,3 +457,432 @@ html[data-theme=dark] body.temporary-mode #paper-clear{color:#f7d8ae}
 html[data-theme=dark] body.temporary-mode .composer #question::placeholder{color:#d4c1a8}
 html[data-theme=dark] body.temporary-mode .chat-header #chat-title{color:#f0c899}
 html[data-theme=dark] body.temporary-mode .temporary-chat-button[aria-pressed=true]{background:#805737;color:#fff7ed;border-color:#9c734e}
+
+/* Filter only the visible history rail; never change the saved conversation list. */
+.chat-sidebar .history-results{display:flex;flex:1 1 auto;flex-direction:column;gap:7px;min-height:0;min-width:0}
+.chat-sidebar .history-search{width:100%;min-height:36px;flex:none;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--ink);font:500 12px "DM Sans",sans-serif;outline:none}
+.chat-sidebar .history-search::placeholder{color:var(--muted)}
+.chat-sidebar .history-search:focus-visible{border-color:var(--forest);outline:2px solid var(--forest);outline-offset:1px}
+.chat-sidebar .history-results .conversation-list{flex:1 1 auto;min-height:0}
+.conversation-item[hidden],.history-search-empty[hidden]{display:none!important}
+.history-search-empty{margin:4px 2px;color:var(--muted);font:500 12px/1.4 "DM Sans",sans-serif}
+html[data-theme=dark] .chat-sidebar .history-search{background:#29372e;color:var(--ink);border-color:#526556}
+@media(max-width:800px){
+  .chat-shell>.chat-sidebar .history-results,body.conversation-mode .chat-shell>.chat-sidebar .history-results{display:none;position:absolute;z-index:11;top:49px;left:0;right:0;max-height:min(58vh,480px);padding:9px 12px;background:#edf0e4;border-bottom:1px solid var(--line);box-shadow:0 16px 24px rgba(23,63,53,.12)}
+  .chat-shell>.chat-sidebar.history-open .history-results,body.conversation-mode .chat-shell>.chat-sidebar.history-open .history-results{display:flex}
+  .chat-sidebar .history-results .conversation-list,.chat-sidebar.history-open .history-results .conversation-list{display:flex;position:static;max-height:min(47vh,400px);padding:0;border:0;box-shadow:none;background:transparent;overflow-y:auto}
+}
+
+@media(max-width:800px){html[data-theme=dark] .chat-shell>.chat-sidebar .history-results,html[data-theme=dark] body.conversation-mode .chat-shell>.chat-sidebar .history-results{background:#1d2923}}
+
+/* Live research journey: stages advance only on events, never on a timer. */
+.research-journey{margin:14px 0 4px;padding:13px 15px;border:1px solid #c8d9cb;border-radius:14px;background:#f8faf5}
+.research-journey-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-bottom:12px;font:700 11px "DM Sans",sans-serif;color:var(--forest)}
+.research-journey-head .research-elapsed{font:500 10px "DM Sans",sans-serif;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.research-journey .research-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin:0;padding:0;list-style:none;font:600 10px/1.35 "DM Sans",sans-serif}
+.research-journey .research-steps li{position:relative;display:flex;align-items:flex-start;gap:5px;min-width:0;padding:0 4px 0 0;border:0;color:var(--muted)}
+.research-journey .research-steps li:not(:last-child)::after{content:"";position:absolute;top:6px;left:16px;right:2px;height:2px;background:#c9d8cb}
+.research-journey .research-steps li.complete:not(:last-child)::after{background:var(--forest-2)}
+.research-step-marker{position:relative;z-index:1;flex:none;width:13px;height:13px;border:2px solid #c9d8cb;border-radius:50%;background:#f8faf5}
+.research-steps li.active{color:var(--forest)}
+.research-steps li.active .research-step-marker{border-color:var(--forest);background:var(--lime);box-shadow:0 0 0 4px rgba(125,163,138,.15);animation:journeyPulse 1.6s ease-in-out infinite}
+.research-steps li.complete{color:var(--forest-2)}
+.research-steps li.complete .research-step-marker{border-color:var(--forest-2);background:var(--forest-2)}
+@keyframes journeyPulse{50%{box-shadow:0 0 0 8px rgba(125,163,138,.05)}}
+html[data-theme=dark] .research-journey{background:#24352b;border-color:#506c55}
+html[data-theme=dark] .research-step-marker{background:#24352b;border-color:#6a826d}
+html[data-theme=dark] .research-journey .research-steps li:not(:last-child)::after{background:#58705e}
+html[data-theme=dark] .research-journey .research-steps li.complete:not(:last-child)::after{background:var(--forest-2)}
+html[data-theme=dark] .research-steps li.active .research-step-marker{background:var(--lime);border-color:var(--lime)}
+html[data-theme=dark] .research-steps li.complete .research-step-marker{background:var(--forest-2);border-color:var(--forest-2)}
+html[data-theme=dark] body.temporary-mode .research-journey{background:#443629;border-color:#8c694a}
+html[data-theme=dark] body.temporary-mode .research-journey-head,html[data-theme=dark] body.temporary-mode .research-steps li.active{color:#f0c899}
+html[data-theme=dark] body.temporary-mode .research-steps li.complete{color:#d7a46f}
+@media(max-width:600px){.research-journey .research-steps{grid-template-columns:1fr;gap:0}.research-journey .research-steps li{min-height:28px;align-items:center;padding-bottom:5px}.research-journey .research-steps li:not(:last-child)::after{left:6px;right:auto;top:17px;bottom:-3px;width:2px;height:auto}.research-journey .research-steps li:last-child{min-height:18px;padding-bottom:0}}
+@media(prefers-reduced-motion:reduce){.research-steps li.active .research-step-marker{animation:none}}
+.research-journey .research-steps li{flex-direction:column;gap:6px}
+.research-journey .research-steps li:not(:last-child)::after{left:15px;top:6px;right:0}
+.research-journey .research-steps li span:last-child{position:relative;z-index:1}
+html[data-theme=dark] body.temporary-mode .research-steps li{color:#c7ae91}
+html[data-theme=dark] body.temporary-mode .research-steps li.active{color:#f5d3a8}
+html[data-theme=dark] body.temporary-mode .research-steps li.complete{color:#e0b98a}
+@media(max-width:600px){.research-journey .research-steps li{flex-direction:row;gap:7px}.research-journey .research-steps li:not(:last-child)::after{left:6px;right:auto;top:17px;bottom:-3px}}
+
+html[data-theme=dark] body.temporary-mode .research-journey .research-steps li{color:#e2c6a4}
+html[data-theme=dark] body.temporary-mode .research-journey .research-steps li.active{color:#fff0d6}
+html[data-theme=dark] body.temporary-mode .research-journey .research-steps li.complete{color:#e8c293}
+html[data-theme=dark] body.temporary-mode .research-journey-head{color:#f5d7ae}
+html[data-theme=dark] body.temporary-mode .research-journey .research-elapsed{color:#d4b99b}
+html[data-theme=dark] body.temporary-mode .chat-message.pending .pending-status{color:#f5d7ae}
+html[data-theme=dark] body.temporary-mode .chat-message.pending .pending-note{color:#e1c3a0}
+
+.research-journey.paused .research-steps li.active .research-step-marker{animation:none;background:var(--paper);border-color:var(--danger);box-shadow:none}
+.research-journey.paused .research-elapsed{color:var(--danger);font-weight:700}
+html[data-theme=dark] body.temporary-mode .chat-message.pending .pending-status::after{background:#e8c293}
+html[data-theme=dark] body.temporary-mode .progress-articles,html[data-theme=dark] body.temporary-mode .progress-articles li{color:#e1c3a0}
+html[data-theme=dark] body.temporary-mode .progress-articles strong{color:#f5d7ae}
+
+/* Answer actions, numeric table comparison, and opt-in dictation */
+.chat-message.assistant .message-actions{margin:13px 0 0;border-top:1px solid #d5e0d4;padding-top:8px}
+.copy-answer,.table-chart-toggle{border:1px solid var(--line,#c8d8cd);background:transparent;color:var(--forest);border-radius:8px;padding:5px 9px;font:600 11px "DM Sans",sans-serif;cursor:pointer}
+.copy-answer:hover,.table-chart-toggle:hover{background:#edf4e9}
+.answer-table-scroll{max-width:100%;overflow-x:auto;margin:10px 0}
+.answer-table-scroll table{border-collapse:collapse;min-width:320px;width:100%;font-size:12px;line-height:1.5;text-align:left}
+.answer-table-scroll th,.answer-table-scroll td{border-bottom:1px solid #cbd9cd;padding:9px 10px;vertical-align:top}
+.answer-table-scroll th{font-weight:700;background:#edf4e9;color:var(--forest)}
+.answer-data{margin:12px 0}.answer-data .table-chart-toggle{margin-bottom:7px}.answer-data [hidden]{display:none!important}
+.answer-chart{border:1px solid #cbd9cd;border-radius:9px;padding:13px;background:#f8faf5;font:12px "DM Sans",sans-serif}
+.answer-chart>strong{display:block;font-size:12px;margin-bottom:12px}.chart-row{display:grid;grid-template-columns:minmax(80px,1fr) minmax(90px,3fr) auto;gap:8px;align-items:center;margin:7px 0;overflow-wrap:anywhere}
+.chart-track{height:11px;background:#e2ebe0;border-radius:3px;overflow:hidden}.chart-bar{height:100%;background:var(--forest-2);border-radius:3px}.chart-row>b{font-variant-numeric:tabular-nums}
+.composer #voice-input{border:0;background:transparent;color:var(--forest);height:32px;min-width:32px;border-radius:8px;cursor:pointer;font-size:18px}.composer #voice-input[hidden]{display:none}.composer #voice-input[aria-pressed=true]{background:#dcebe0;outline:2px solid var(--forest-2)}
+html[data-theme=dark] .copy-answer,html[data-theme=dark] .table-chart-toggle{color:#c4df72;border-color:#58705e}
+html[data-theme=dark] .answer-table-scroll th,html[data-theme=dark] .answer-chart{background:#24352b;color:#eaf3ec}
+html[data-theme=dark] .answer-table-scroll th,html[data-theme=dark] .answer-table-scroll td,html[data-theme=dark] .answer-chart{border-color:#58705e}
+html[data-theme=dark] .composer #voice-input{color:#c4df72}
+@media(max-width:550px){.chart-row{grid-template-columns:minmax(60px,1fr) minmax(65px,2fr) auto}.chat-message.assistant .message-actions{margin-left:0}}
+.composer{grid-template-columns:auto minmax(0,1fr) auto auto}
+.composer #voice-input{align-self:center;display:grid;place-items:center}
+
+/* Optional navigation stays out of the way until there is a thread to navigate. */
+.conversation-chapters{display:flex;gap:12px;align-items:center;border-top:1px solid var(--line);padding:7px clamp(18px,3vw,36px);font:600 10px "DM Sans",sans-serif;min-width:0}
+.conversation-chapters[hidden],.followup-lens[hidden],.thread-jump[hidden]{display:none!important}
+.conversation-chapters>span{flex:none;color:var(--muted)}#chapter-links{display:flex;gap:6px;overflow-x:auto;scrollbar-width:thin;min-width:0}
+#chapter-links button{flex:none;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:transparent;border:1px solid var(--line);border-radius:6px;color:var(--forest);padding:4px 7px;cursor:pointer;font:600 10px "DM Sans",sans-serif}
+#chapter-links button:hover,#chapter-links button:focus-visible{background:#edf4e9;outline:2px solid var(--forest-2)}
+.thread-jump{position:absolute;right:20px;bottom:128px;z-index:2;display:flex;gap:6px}.thread-jump button{border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--forest);padding:8px 10px;box-shadow:0 4px 12px #173f351c;cursor:pointer;font:700 10px "DM Sans",sans-serif}
+.followup-lens{display:flex;align-items:center;gap:8px;margin:0 0 7px;font:11px "DM Sans",sans-serif;color:var(--muted);min-width:0}.followup-lens strong{color:var(--forest);white-space:nowrap}.followup-lens span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.followup-lens button{border:0;background:transparent;color:var(--forest-2);text-decoration:underline;cursor:pointer;white-space:nowrap;font:700 10px "DM Sans",sans-serif}
+.research-replay{margin-top:12px;border-top:1px solid var(--line);padding-top:10px;font-size:11px}.research-replay summary{cursor:pointer;font-weight:700;color:var(--forest)}.research-replay p{color:var(--muted);margin:7px 0}.research-replay ol{padding-left:18px;margin:7px 0}.research-replay li{padding:4px 0}
+.chart-row{grid-template-columns:minmax(80px,1fr) minmax(90px,3fr) auto auto}.ask-chart-point{border:1px solid var(--line);background:var(--paper);color:var(--forest);font:700 10px "DM Sans",sans-serif;border-radius:6px;padding:4px 6px;cursor:pointer}.ask-chart-point:hover{background:#edf4e9}
+html[data-theme=dark] .thread-jump button,html[data-theme=dark] .ask-chart-point{background:#29372e;color:#c4df72}
+@media(max-width:800px){.conversation-chapters{padding:6px 12px}.conversation-chapters>span{display:none}.thread-jump{bottom:115px;right:12px}.followup-lens{font-size:10px}.followup-lens span{display:none}.chart-row{grid-template-columns:minmax(60px,1fr) minmax(65px,2fr) auto auto}}
+@media(prefers-reduced-motion:reduce){.thread-jump *,#chapter-links *{scroll-behavior:auto}}
+
+/* Accessible sun/moon switch; clouds cross the orb on change only. */
+.theme-toggle{display:inline-grid!important;place-items:center!important;width:43px!important;height:35px!important;min-width:43px!important;padding:0!important;overflow:hidden!important;position:relative!important;vertical-align:middle!important}
+.theme-toggle:focus-visible{outline:3px solid var(--forest-2,#255b4d)!important;outline-offset:2px}
+.theme-sky{width:27px;height:23px;position:relative;display:block}.theme-orb{position:absolute;left:7px;top:4px;width:16px;height:16px;border-radius:50%;background:#d99b49;box-shadow:0 0 0 3px #d99b4930;transition:background .32s,box-shadow .32s,transform .32s}
+.theme-cloud{position:absolute;left:-11px;top:11px;width:17px;height:6px;border-radius:8px;background:var(--paper);box-shadow:7px -3px 0 -1px var(--paper);opacity:0;pointer-events:none}
+html[data-theme=dark] .theme-orb{background:#dce5df;box-shadow:inset -5px -2px 0 #7e9b8c;transform:rotate(-18deg)}
+.theme-toggle.theme-just-changed .theme-cloud{animation:cloud-cross .4s ease-out both}@keyframes cloud-cross{0%{transform:translateX(0);opacity:0}30%{opacity:.9}100%{transform:translateX(47px);opacity:0}}
+@media(prefers-reduced-motion:reduce){.theme-orb{transition:none}.theme-toggle.theme-just-changed .theme-cloud{animation:none}}
+
+.thread-jump button[hidden]{display:none}.thread-jump{bottom:145px}.chat-message:not(.pending){animation:messageIn .17s ease-out both}@keyframes messageIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media(max-width:800px){.thread-jump{bottom:140px}}@media(prefers-reduced-motion:reduce){.chat-message:not(.pending){animation:none}}
+
+html[data-theme=dark] .research-replay,html[data-theme=dark] .chat-message.assistant .message-actions{border-color:#58705e}html[data-theme=dark] .conversation-chapters{border-color:#58705e}html[data-theme=dark] #chapter-links button{color:#c4df72;border-color:#58705e}html[data-theme=dark] .followup-lens strong,html[data-theme=dark] .followup-lens button{color:#c4df72}
+
+/* Motion is tied to explicit user actions or real research events. */
+.in-chat-source.source-flash,.message-content>p.source-flash{animation:sourcePulse .8s ease-out}@keyframes sourcePulse{0%{background:#dcecc7}100%{background:transparent}}
+#chapter-links button[aria-current=true]{border-color:var(--forest-2);box-shadow:inset 0 -2px 0 var(--forest-2)}
+.thread-jump:not([hidden]){animation:quietReveal .16s ease-out both}@keyframes quietReveal{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.in-chat-source.source-flash,.message-content>p.source-flash,.thread-jump:not([hidden]){animation:none}}
+
+/* Temporary mode colors the whole app shell, including history and mobile chrome. */
+body.temporary-mode .chat-sidebar{background:#f0ddbc;border-color:#d8b991}
+body.temporary-mode .chat-sidebar .sidebar-heading{color:#70492f}
+body.temporary-mode .chat-sidebar .sidebar-heading .temporary-chat-button[aria-pressed=true]{background:#875b36;border-color:#875b36;color:#fffaf0}
+body.temporary-mode .chat-sidebar :is(.history-toggle,select,.conversation-row){color:#70492f;border-color:#d8b991}
+body.temporary-mode .chat-sidebar :is(.history-toggle,select){background:#f9ecd5}
+body.temporary-mode .chat-sidebar .conversation-row:hover,body.temporary-mode .chat-sidebar .conversation-row.active{background:#e8cda2;color:#4d301e}
+body.temporary-mode .toolbar{background:#f0ddbc;border-bottom-color:#d8b991}
+@media(max-width:800px){body.temporary-mode.conversation-mode .toolbar{background:#f0ddbc;border-bottom-color:#d8b991}}
+html[data-theme=dark] body.temporary-mode .chat-sidebar{background:#392d23;border-color:#67513d}
+html[data-theme=dark] body.temporary-mode .chat-sidebar .sidebar-heading{color:#f0c899}
+html[data-theme=dark] body.temporary-mode .chat-sidebar :is(.history-toggle,select,.conversation-row){color:#f7d8ae;border-color:#8c694a}
+html[data-theme=dark] body.temporary-mode .chat-sidebar :is(.history-toggle,select){background:#49392b!important}
+html[data-theme=dark] body.temporary-mode .chat-sidebar .conversation-row:hover,html[data-theme=dark] body.temporary-mode .chat-sidebar .conversation-row.active{background:#654831;color:#fff0d6}
+html[data-theme=dark] body.temporary-mode .toolbar{background:#392d23;border-bottom-color:#67513d}
+@media(max-width:800px){html[data-theme=dark] body.temporary-mode.conversation-mode .toolbar{background:#392d23;border-bottom-color:#67513d}}
+body.temporary-mode .chat-sidebar :is(.history-search,.rename-input){background:#fff5e5;border-color:#d8b991;color:#4d301e}
+body.temporary-mode .chat-sidebar .sidebar-note{border-color:#d8b991}
+body.temporary-mode .chat-sidebar .sidebar-note :is(strong,span),body.temporary-mode .chat-sidebar .sidebar-options,body.temporary-mode .chat-sidebar .sidebar-options label{color:#70492f}
+body.temporary-mode .chat-sidebar .icon-button{background:#875b36;color:#fffaf0}
+body.temporary-mode .chat-sidebar .history-results,body.temporary-mode .chat-sidebar .conversation-list{background:#f0ddbc;border-color:#d8b991}
+@media(max-width:800px){body.temporary-mode.conversation-mode .chat-shell>.chat-sidebar .history-results{background:#f0ddbc;border-color:#d8b991}}
+html[data-theme=dark] body.temporary-mode .chat-sidebar :is(.history-search,.rename-input){background:#49392b;border-color:#8c694a;color:#fff0d6}
+html[data-theme=dark] body.temporary-mode .chat-sidebar .sidebar-note{border-color:#67513d}
+html[data-theme=dark] body.temporary-mode .chat-sidebar .sidebar-note :is(strong,span),html[data-theme=dark] body.temporary-mode .chat-sidebar .sidebar-options,html[data-theme=dark] body.temporary-mode .chat-sidebar .sidebar-options label{color:#e9cba5}
+html[data-theme=dark] body.temporary-mode .chat-sidebar .icon-button{background:#805737;color:#fff7ed}
+html[data-theme=dark] body.temporary-mode .chat-sidebar .history-results,html[data-theme=dark] body.temporary-mode .chat-sidebar .conversation-list{background:#392d23;border-color:#67513d}
+@media(max-width:800px){html[data-theme=dark] body.temporary-mode.conversation-mode .chat-shell>.chat-sidebar .history-results{background:#392d23;border-color:#67513d}}
+/* The per-conversation profile control stays visible in the chat header on mobile. */
+.chat-header .header-profile-toggle{display:inline-flex;align-items:center;gap:5px;font:600 11px "DM Sans",sans-serif;color:var(--forest);cursor:pointer;white-space:nowrap}
+.chat-header .header-profile-toggle input{accent-color:#255b4d;width:15px;height:15px;margin:0;cursor:pointer}
+.chat-header .header-profile-toggle input:disabled{cursor:not-allowed}
+.chat-panel>.profile-use-note{position:absolute;right:18px;top:63px;z-index:1;padding:3px 7px;border-radius:0 0 7px 7px;background:#eaf1eb;color:#456758;font:500 10px "DM Sans",sans-serif}
+body.temporary-mode .chat-header .header-profile-toggle{color:#70492f}
+body.temporary-mode .chat-panel>.profile-use-note{background:#f0dcb4;color:#70492f}
+html[data-theme=dark] .chat-header .header-profile-toggle{color:#dce5df}
+html[data-theme=dark] .chat-panel>.profile-use-note{background:#29372e;color:#acbeb1}
+html[data-theme=dark] body.temporary-mode .chat-header .header-profile-toggle{color:#f7d8ae}
+html[data-theme=dark] body.temporary-mode .chat-panel>.profile-use-note{background:#493628;color:#f7d8ae}
+@media(max-width:800px){.chat-header .header-profile-toggle{font-size:10px}.chat-panel>.profile-use-note{top:62px;right:10px;font-size:9px}}
+/* A completed connector draws only after an SSE stage update marks it complete. */
+.research-journey .research-steps li.complete:not(:last-child)::after{background:#c9d8cb}
+.research-journey .research-steps li.complete:not(:last-child)::before{content:"";position:absolute;top:6px;left:16px;right:2px;height:2px;background:var(--forest-2);transform:scaleX(1);transform-origin:left center;animation:journeyLineDraw .65s ease-out both}
+@keyframes journeyLineDraw{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+html[data-theme=dark] .research-journey .research-steps li.complete:not(:last-child)::before{background:var(--forest-2)}
+@media(max-width:600px){.research-journey .research-steps li.complete:not(:last-child)::before{left:6px;right:auto;top:17px;bottom:-3px;width:2px;height:auto;transform-origin:center top;animation:journeyLineDrawMobile .65s ease-out both}@keyframes journeyLineDrawMobile{from{transform:scaleY(0)}to{transform:scaleY(1)}}}
+@media(prefers-reduced-motion:reduce){.research-journey .research-steps li.complete:not(:last-child)::before{animation:none;transform:none}}
+
+/* Keep the short explanation below the header, never squeezed into its row. */
+.chat-header{position:relative}
+.chat-panel>.chat-header .profile-use-note{position:absolute;top:100%;right:12px;z-index:2;max-width:220px;padding:3px 7px;border-radius:0 0 7px 7px;background:#eaf1eb;color:#456758;font:500 10px/1.25 "DM Sans",sans-serif;text-align:right}
+body.temporary-mode .chat-header .profile-use-note{background:#f0dcb4;color:#70492f}
+html[data-theme=dark] .chat-header .profile-use-note{background:#29372e;color:#acbeb1}
+html[data-theme=dark] body.temporary-mode .chat-header .profile-use-note{background:#493628;color:#f7d8ae}
+@media(max-width:800px){.chat-panel>.chat-header .profile-use-note{right:9px;max-width:190px;font-size:9px}}
+#profile-additional-notes{width:100%;min-height:74px;resize:vertical;border:1px solid var(--line);border-radius:9px;padding:10px;font:500 12px/1.5 "DM Sans",sans-serif;color:var(--ink);background:var(--paper)}
+html[data-theme=dark] #profile-additional-notes{background:#29372e;color:#eaf3ec;border-color:#58705e}
+
+.profile-files{margin:18px 0 8px;padding-top:16px;border-top:1px solid var(--line)}
+.profile-files>label{display:block;font-weight:700;margin-bottom:6px}
+.profile-file-picker{display:flex;align-items:center;gap:10px;min-width:0;margin:10px 0;color:var(--muted);font:500 12px "DM Sans",sans-serif}
+.profile-file-picker input[type=file]{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:0!important;opacity:0;overflow:hidden;clip-path:inset(50%)}
+.profile-file-button{flex:none;display:inline-flex;align-items:center;min-height:34px;padding:7px 12px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--forest);font:700 12px "DM Sans",sans-serif;cursor:pointer}
+.profile-file-button:hover{background:#edf4e9}
+.profile-file-picker input[type=file]:focus-visible+.profile-file-button{outline:2px solid var(--forest-2);outline-offset:2px}
+#profile-file-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-theme=dark] .profile-file-button{background:#29372e;border-color:#58705e;color:#c4df72}
+html[data-theme=dark] .profile-file-button:hover{background:#364b3b}
+@media(max-width:420px){.profile-file-picker{gap:8px}.profile-file-button{padding:7px 9px}#profile-file-name{font-size:11px}}
+.profile-files>button{margin:0 0 9px}
+.profile-files ul{list-style:none;margin:0;padding:0;max-height:130px;overflow:auto}
+.profile-files li{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;padding:5px 0;border-bottom:1px solid var(--line)}
+.profile-files li span{overflow-wrap:anywhere;min-width:0}
+.profile-files li button{flex:none}
+#profile-dialog{max-height:calc(100vh - 32px);overflow-y:auto}
+
+/* Keep the account menu above the conversation shell and its profile note. */
+.toolbar{z-index:30}
+.account-menu{z-index:31}
+.account-dropdown{z-index:32}
+
+#profile-dialog{max-height:min(900px,calc(100dvh - 32px))}
+#profile-dialog form{display:flex;flex-direction:column}
+#profile-dialog .dialog-actions{position:sticky;bottom:-1px;z-index:3;margin-top:8px;padding:10px 0 0;background:var(--paper);border-top:1px solid var(--line)}
+#profile-dialog form{display:block}
+
+
+.header-answer-mode{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;color:var(--muted)}
+.header-answer-mode select{max-width:90px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);font:600 12px "DM Sans",sans-serif;padding:6px 7px;cursor:pointer}
+.header-answer-mode select:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+.header-answer-mode select:disabled{opacity:.6;cursor:wait}
+@media(max-width:800px){.header-answer-mode span{display:none}.header-answer-mode select{max-width:74px;padding:5px}}
+
+/* Profile reset must read as destructive in both themes. */
+#profile-dialog #profile-clear{border:1px solid #c77970;background:#fff1ed;color:#9b302a;box-shadow:none}
+#profile-dialog #profile-clear:hover{background:#ffe1da}
+html[data-theme=dark] #profile-dialog #profile-clear{border-color:#a95e58;background:#412b29;color:#ffb5a8}
+html[data-theme=dark] #profile-dialog #profile-clear:hover{background:#563330}
+
+/* Countdown stays available without competing with the main navigation. */
+#session-countdown{margin-left:3px;opacity:.65;font:500 9px "DM Sans",sans-serif;letter-spacing:0}
+html[data-theme=dark] #session-countdown{color:#a8baad;opacity:.75}
+.research-audit{border:1px solid var(--line);border-radius:12px;padding:12px;overflow-wrap:anywhere}
+.research-audit summary{line-height:1.4}
+.research-audit-card{border-top:1px solid var(--line);padding:9px 0}
+.research-audit-card p{margin:5px 0;line-height:1.45}
+.research-audit a{color:var(--forest);text-decoration:underline}
+html[data-theme=dark] .research-audit a{color:#c4df72}
+
+/* Selected history rows must keep readable contrast when hovered or focused. */
+.chat-sidebar .history-results .conversation-row.active,
+.chat-sidebar .history-results .conversation-row.active:is(:hover,:focus-visible){background:#173f35;color:#fffdf7;outline:2px solid transparent}
+html[data-theme=dark] .chat-sidebar .history-results .conversation-row.active,
+html[data-theme=dark] .chat-sidebar .history-results .conversation-row.active:is(:hover,:focus-visible){background:#3a5d45;color:#fff}
+
+/* Native select menus inherit OS colors unless every option has an explicit palette. */
+html:not([data-theme=dark]) .header-answer-mode select{color-scheme:light;background:#fffdf7;color:#173f35;border-color:#b7cbbd}
+html:not([data-theme=dark]) .header-answer-mode select option{background:#fffdf7;color:#173f35}
+html[data-theme=dark] .header-answer-mode select{color-scheme:dark;background:#29372e;color:#eaf3ec;border-color:#58705e}
+html[data-theme=dark] .header-answer-mode select option{background:#29372e;color:#eaf3ec}
+#session-countdown{display:inline-flex;align-items:center;margin-left:7px;padding:4px 8px;border:1px solid #d7e3d7;border-radius:999px;background:#eef3e9;color:#315b4d;opacity:1;font:600 10px/1 "DM Sans",sans-serif;letter-spacing:0}
+#session-countdown[hidden]{display:none}
+html[data-theme=dark] #session-countdown{background:#263b2e;border-color:#4a6a53;color:#d4e8d1;opacity:1}
+@media(max-width:800px){#session-countdown{display:none}}
+
+/* Native select popups are OS-owned and ignore option palette rules. */
+/* Direct Light/Heavy toggle. The selected state is shown with a distinct icon and label. */
+.answer-mode-picker{position:relative;display:inline-flex;align-items:center}
+.answer-mode-picker #answer-mode{position:absolute;width:1px;height:1px;padding:0;border:0;opacity:0;pointer-events:none;clip-path:inset(50%);appearance:none;-webkit-appearance:none}
+.answer-mode-trigger{height:34px;min-width:91px;display:inline-flex;justify-content:center;align-items:center;gap:7px;padding:0 10px;border:1px solid #b7cbbd;border-radius:9px;background:#fffdf7;color:#173f35;font:700 12px "DM Sans",sans-serif;cursor:pointer;transition:background-color .2s,border-color .2s,box-shadow .2s,transform .2s}
+.answer-mode-trigger:hover{box-shadow:0 2px 10px rgba(23,63,53,.12);transform:translateY(-1px)}
+.answer-mode-trigger:focus-visible{outline:2px solid #255b4d;outline-offset:2px}
+.answer-mode-trigger:disabled{opacity:.6;cursor:wait;transform:none}
+.answer-mode-picker[data-mode=heavy] .answer-mode-trigger{background:#e9f1e8;border-color:#739c7c;color:#174d3b}
+.mode-icon{display:inline-flex;width:17px;height:17px;align-items:center;justify-content:center}
+.mode-icon svg{display:block;width:17px;height:17px}
+.answer-mode-trigger.mode-flip .mode-icon{animation:mode-icon-enter .28s ease-out}
+@keyframes mode-icon-enter{from{opacity:.35;transform:rotate(-20deg) scale(.75)}to{opacity:1;transform:rotate(0) scale(1)}}
+@media(prefers-reduced-motion:reduce){.answer-mode-trigger{transition:none}.answer-mode-trigger.mode-flip .mode-icon{animation:none}}
+html[data-theme=dark] .answer-mode-trigger{background:#29372e;border-color:#58705e;color:#eaf3ec}
+html[data-theme=dark] .answer-mode-picker[data-mode=heavy] .answer-mode-trigger{background:#345b42;border-color:#8bae8b;color:#f2f8ef}
+.chat-header .profile-use-note{z-index:1}
+.chat-panel>.chat-header .profile-use-note{right:12px;top:100%;max-width:230px}
+@media(max-width:800px){.chat-panel>.chat-header .profile-use-note{right:9px;max-width:160px}}
+
+/* Explain both research settings on hover, focus and touch without blocking the header. */
+.mode-explanation{position:absolute;z-index:60;top:calc(100% + 12px);right:0;width:282px;box-sizing:border-box;display:flex;flex-direction:column;gap:5px;padding:12px;border:1px solid #b7cbbd;border-radius:10px;background:#fffdf7;color:#34584e;box-shadow:0 10px 24px rgba(23,63,53,.16);font:500 11px/1.45 "DM Sans",sans-serif;white-space:normal;overflow-wrap:break-word;opacity:0;visibility:hidden;transform:translateY(-4px);transition:opacity .16s,transform .16s,visibility .16s;pointer-events:none}
+.mode-explanation strong{color:#173f35;font-weight:700}
+.mode-explanation span{min-width:0;white-space:normal}
+.answer-mode-picker:hover .mode-explanation,.answer-mode-picker:focus-within .mode-explanation{opacity:1;visibility:visible;transform:translateY(0)}
+.chat-header:has(.mode-explanation:hover) .profile-use-note,.chat-header:has(.answer-mode-picker:hover) .profile-use-note,.chat-header:has(.answer-mode-picker:focus-within) .profile-use-note{visibility:hidden}
+html[data-theme=dark] .mode-explanation{background:#29372e;color:#d6e5d9;border-color:#58705e}
+html[data-theme=dark] .mode-explanation strong{color:#f2f8ef}
+@media(max-width:800px){.mode-explanation{right:0;width:min(282px,calc(100vw - 28px))}}
+@media(prefers-reduced-motion:reduce){.mode-explanation{transition:none;transform:none}}
+
+.answer-mode-picker #answer-mode[hidden]{display:none!important}
+
+/* Conversational reading size and optional edge-to-edge workspace. */
+.message-content{font-size:16px;line-height:1.65}
+.chat-sidebar .conversation-row,.chat-sidebar .history-toggle,.chat-sidebar select{font-size:14px}
+.chat-sidebar .sidebar-note span,.sidebar-options,.composer-meta{font-size:12px}
+@media(max-width:800px){.message-content{font-size:15px}}
+/* Inactive rows need a fixed ink on the light hover/focus surface. */
+html:not([data-theme=dark]) .chat-sidebar .history-results .conversation-row:not(.active){color:#173f35}
+html:not([data-theme=dark]) .chat-sidebar .history-results .conversation-row:not(.active):is(:hover,:focus-visible){background:#dbe8dc;color:#173f35}
+html[data-theme=dark] .chat-sidebar .history-results .conversation-row:not(.active):is(:hover,:focus-visible){background:#29372e;color:#eaf3ec}
+
+/* First-question history with a compact, expandable question index. */
+.conversation-item{display:grid;grid-template-columns:25px minmax(0,1fr) 24px;align-items:center;gap:3px}
+.conversation-item .conversation-row{padding-right:8px}
+.conversation-expand,.pair-delete{border:0;background:transparent;color:var(--forest);cursor:pointer;min-width:24px;min-height:30px;font:700 16px "DM Sans",sans-serif}
+.conversation-expand:hover,.pair-delete:hover{background:var(--line);border-radius:6px}
+.conversation-item .rename-button{position:static;grid-column:3;grid-row:1}
+.conversation-pairs{grid-column:1/-1;margin:0 2px 7px 23px;padding:5px 0 2px 9px;border-left:1px solid var(--line);color:var(--muted);font:500 12px/1.4 "DM Sans",sans-serif}
+.conversation-pairs[hidden],.history-undo[hidden]{display:none!important}
+.conversation-pair{display:flex;align-items:center;gap:2px;min-width:0}
+.pair-open{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);padding:6px 2px;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 12px "DM Sans",sans-serif;cursor:pointer}
+.pair-open:hover{text-decoration:underline}
+.pair-delete{color:var(--muted);opacity:.7}.pair-delete:hover{color:var(--danger);opacity:1}
+.history-undo{position:fixed;z-index:30;left:50%;bottom:24px;transform:translateX(-50%);display:flex;gap:15px;align-items:center;max-width:calc(100vw - 32px);padding:11px 16px;border-radius:10px;box-shadow:0 6px 30px rgba(0,0,0,.2);background:var(--forest);color:#fff;font:600 13px "DM Sans",sans-serif}
+.history-undo button{border:0;background:transparent;color:#fff;text-decoration:underline;font:700 13px "DM Sans",sans-serif;cursor:pointer}
+
+.conversation-pair{flex-wrap:wrap}.pair-preview-body{flex-basis:100%;padding:0 4px 5px}.pair-preview{border:0;background:transparent;color:var(--forest-2);font:700 11px "DM Sans",sans-serif;cursor:pointer;padding:2px}.pair-answer{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:4px;color:var(--ink);font:400 11px/1.45 "DM Sans",sans-serif}.pair-answer[hidden]{display:none}
+
+.history-undo{flex-direction:column;align-items:stretch;max-height:40vh;overflow-y:auto}.history-undo-item{display:flex;gap:15px;align-items:center;justify-content:space-between}.pair-answer{max-height:250px;overflow:auto;padding:4px 6px;border:1px solid var(--line);border-radius:7px}
+
+.toolbar .dietchat-brand{margin-right:auto;display:inline-flex;align-items:center;gap:7px;text-decoration:none;color:var(--forest);font:700 18px "Fraunces",serif;padding:0 8px 0 0}.toolbar .dietchat-brand img{width:29px;height:29px}.toolbar .back-to-dietnerd{font-weight:700}@media(max-width:600px){.toolbar .dietchat-brand strong{display:none}.toolbar .back-to-dietnerd{font-size:11px}}
+
+/* Keep the primary conversation action legible in both palettes. */
+.chat-sidebar .sidebar-heading>span{max-width:none;white-space:normal;line-height:1.2;font-size:12px;overflow:visible;flex:1 1 auto}
+@media(max-width:800px){.chat-sidebar .sidebar-heading>span{display:none}}
+@media(max-width:800px){
+  body.conversation-mode .toolbar>.dietchat-brand,
+  body.conversation-mode .toolbar>.back-to-dietnerd{display:inline-flex}
+  body.conversation-mode .toolbar>.dietchat-brand{margin-right:auto;padding:0 3px}
+  body.conversation-mode .toolbar>.back-to-dietnerd{font-size:10px;padding:5px 3px;white-space:nowrap}
+  body.conversation-mode .toolbar .theme-toggle{margin-right:0}
+  body.conversation-mode .toolbar .account-menu{margin-left:0;max-width:34%}
+  body.conversation-mode .toolbar #account-button{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+}
+@media(max-width:800px){
+  body.conversation-mode .toolbar>.dietchat-brand strong{display:inline;font-size:13px}
+  body.conversation-mode .toolbar>.dietchat-brand img{width:25px;height:25px}
+  body.conversation-mode .toolbar>.back-to-dietnerd{font-size:9px}
+  body.conversation-mode .toolbar .account-menu{max-width:26%}
+}
+
+/* The paused tooltip is one stacked message, never a two-column grid: a long
+   heading in the old 42px column painted over the explanation. */
+.mode-explanation strong,.mode-explanation span{display:block;min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.4}
+.answer-mode-trigger:disabled{cursor:not-allowed}
+
+/* On narrow screens, a paused mode's explanation stays inside the viewport. */
+@media(max-width:800px){.mode-explanation{right:0;max-width:calc(100vw - 28px)}}
+
+/* Action feedback stays beside history and Temporary, not below a long answer. */
+.sidebar-action-status{margin:0;padding:9px 10px;border:1px solid #c9b28b;border-radius:8px;background:#fff4dc;color:#654628;font:600 11px/1.4 "DM Sans",sans-serif}
+.sidebar-action-status[hidden]{display:none!important}
+html[data-theme=dark] .sidebar-action-status{background:#3e3426;color:#f3d6a8;border-color:#80694b}
+
+/* Acknowledge pair deletion and restoration without changing the row order. */
+.pair-removing{animation:pairLeave .18s ease-in forwards;pointer-events:none}
+.pair-restoring{animation:pairReturn .85s ease-out both;border-radius:7px}
+@keyframes pairLeave{to{opacity:0;transform:translateX(9px) scale(.985);max-height:0;overflow:hidden}}
+@keyframes pairReturn{0%{opacity:.3;transform:translateX(-6px);background:rgba(145,183,104,.34)}65%{opacity:1;transform:none;background:rgba(145,183,104,.2)}100%{background:transparent}}
+@media(prefers-reduced-motion:reduce){.pair-removing,.pair-restoring{animation:none!important}}
+
+/* Rename is a first-class history action, not a hover-only secret. */
+.conversation-item .rename-button{opacity:1;width:26px;height:30px;min-width:26px;color:#315c50;background:rgba(23,63,53,.055);font-size:15px}
+.conversation-item .rename-button:hover,.conversation-item .rename-button:focus-visible{background:#d2e3d1;color:#173f35}
+html[data-theme=dark] .conversation-item .rename-button{color:#d4e8d1;background:#314535}
+html[data-theme=dark] .conversation-item .rename-button:hover,html[data-theme=dark] .conversation-item .rename-button:focus-visible{background:#436e53;color:#fff}
+
+.food-comparison-chart + .food-comparison-chart{margin-top:12px}
+.food-comparison-chart .chart-row{grid-template-columns:minmax(80px,1fr) minmax(90px,3fr) auto}
+@media(max-width:550px){.food-comparison-chart .chart-row{grid-template-columns:minmax(60px,1fr) minmax(65px,2fr) auto}}
+
+/* Small, persistent status beside the selected Heavy mode. */
+.heavy-experiment-note{font:500 10px/1.25 "DM Sans",sans-serif;color:var(--muted);margin-left:6px;max-width:135px;white-space:normal}
+.heavy-experiment-note[hidden]{display:none!important}
+@media(max-width:600px){.heavy-experiment-note{max-width:83px;font-size:9px}}
+
+/* Keep the research switch in the mobile header. The older rule hid every
+   header span, including the entire mode control. */
+@media(max-width:800px){
+  .chat-header .header-actions>span.header-answer-mode{display:inline-flex;flex:0 0 auto;align-items:center;gap:0}
+  .chat-header .header-answer-mode>span:first-child{display:none}
+  .chat-header .header-actions{gap:7px;min-width:0}
+  .chat-header #chat-title{overflow:hidden;text-overflow:ellipsis;max-width:34vw}
+  .chat-header .answer-mode-trigger{min-width:66px;height:30px;padding:0 7px;font-size:11px}
+  .chat-header .heavy-experiment-note{max-width:82px;font-size:9px;line-height:1.2}
+  .chat-header .header-button{display:none}
+}
+@media(max-width:380px){
+  .chat-header #chat-title{max-width:25vw}
+  .chat-header .header-profile-toggle{font-size:9px}
+  .chat-header .header-actions{gap:5px}
+  .chat-header .heavy-experiment-note{max-width:65px;font-size:8px}
+}
+@media(max-width:800px){
+  .chat-header .header-answer-mode .answer-mode-picker{display:inline-flex}
+  .chat-header .header-answer-mode .answer-mode-picker .mode-icon,
+  .chat-header .header-answer-mode .answer-mode-picker .mode-label{display:inline-flex}
+  .chat-header .header-answer-mode .answer-mode-picker .heavy-experiment-note:not([hidden]){display:block}
+}
+@media(max-width:800px){
+  .chat-panel>.chat-header{min-width:0;overflow:visible}
+  .chat-header>div:first-child{min-width:0;flex:1 1 auto;overflow:hidden}
+  .chat-header>div:first-child #chat-title{max-width:none;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chat-header .header-actions{flex:0 0 auto;gap:5px}
+  .chat-header .header-answer-mode .heavy-experiment-note{max-width:65px;font-size:8px}
+}
+
+/* Fixed geometry for both research states: no jump when the note appears. */
+.chat-header .header-answer-mode{flex:0 0 auto}
+.chat-header .answer-mode-picker{display:grid;grid-template-columns:91px 135px;align-items:center;column-gap:6px;width:232px;min-width:232px}
+.chat-header .answer-mode-trigger{width:91px;min-width:91px}
+.chat-header .heavy-experiment-note{grid-column:2;display:block;visibility:hidden;opacity:0;margin:0;max-width:135px;white-space:normal;transition:opacity .18s ease}
+.chat-header .heavy-experiment-note.is-heavy{visibility:visible;opacity:1}
+@media(max-width:800px){
+  .chat-header .header-answer-mode .answer-mode-picker{display:grid;grid-template-columns:74px 65px;column-gap:5px;width:144px;min-width:144px}
+  .chat-header .answer-mode-trigger{width:74px;min-width:74px}
+  .chat-header .header-answer-mode .heavy-experiment-note{display:block;grid-column:2;max-width:65px;font-size:8px}
+}
+@media(prefers-reduced-motion:reduce){.chat-header .heavy-experiment-note{transition:none}}
+/* Give the mobile title a full line rather than truncating it against the mode. */
+@media(max-width:600px){
+  .chat-panel,body.conversation-mode .chat-panel{grid-template-rows:78px minmax(0,1fr) auto auto auto auto}
+  .chat-header,.conversation-mode .chat-header{height:78px;display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:3px;padding:5px 14px}
+  .chat-header>div:first-child{flex:0 0 auto;max-width:100%;width:100%}
+  .chat-header .header-actions{width:100%;justify-content:flex-end}
+}
+
+/* v19: no inline experimental feature note; the mode button keeps its width. */
+.chat-header .answer-mode-picker{display:inline-flex;width:91px;min-width:91px}
+.chat-header .answer-mode-trigger{width:91px;min-width:91px}
+@media(max-width:800px){
+  .chat-header .header-answer-mode .answer-mode-picker{display:inline-flex;width:74px;min-width:74px}
+  .chat-header .answer-mode-trigger{width:74px;min-width:74px}
+}
+
+#message-queue{box-sizing:border-box;width:100%;margin:0 0 9px;padding:10px 14px;background:var(--paper);border:1px solid var(--line);border-radius:14px;max-height:170px;overflow:auto;text-align:left}
+#message-queue[hidden]{display:none}
+.queue-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--muted);font-size:11px}
+.queue-heading button{border:0;background:#e9eee6;color:var(--forest);padding:6px 10px;border-radius:8px;font:700 11px "DM Sans";cursor:pointer}
+.queue-item{display:flex;align-items:center;gap:8px;padding:8px 0 0;margin-top:7px;border-top:1px solid var(--line);font-size:12px;line-height:1.5;color:var(--ink)}
+.queue-item span{flex:1;min-width:0;overflow-wrap:anywhere}
+.queue-item button{flex-shrink:0;width:28px;height:28px;border:0;background:transparent;color:var(--muted);font-size:18px;padding:0;cursor:pointer}

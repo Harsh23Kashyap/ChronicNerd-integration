@@ -13,3 +13,7 @@ tests/browser-upload.txt
 .env
 # Generated S3 site package
 dist/
+
+# Local backup artifacts
+*.bak*
+.DS_Store

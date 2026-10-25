@@ -18,5 +18,5 @@
         if (value) localStorage.setItem(storageKey, 'yes');
         else localStorage.removeItem(storageKey);
     }
-    window.ChronicNerdAddons = Object.freeze({enabled, setEnabled, account});
+    window.DietChatAddons = Object.freeze({enabled, setEnabled, account});
 })();

@@ -8,7 +8,7 @@
     const loadingTimer = window.setTimeout(() => {
         if (!document.documentElement.classList.contains('auth-pending')) return;
         loading?.classList.add('failed');
-        loading?.querySelector('strong')?.replaceChildren(document.createTextNode('DietNerd is taking longer than expected'));
+        loading?.querySelector('strong')?.replaceChildren(document.createTextNode('DietChat is taking longer than expected'));
         const status = document.createElement('p');
         status.textContent = 'Check your connection and try again.';
         const retry = document.createElement('button');
@@ -44,12 +44,12 @@
             update();
         }
         if (email === undefined) {
-            document.querySelector('.hint').textContent = 'DietNerd cannot reach its server right now. Please try again in a moment.';
+            document.querySelector('.hint').textContent = 'DietChat cannot reach its server right now. Please try again in a moment.';
         }
     }).catch(() => {
         window.clearTimeout(loadingTimer);
         loading?.classList.add('failed');
-        loading?.querySelector('strong')?.replaceChildren(document.createTextNode('Could not open DietNerd'));
+        loading?.querySelector('strong')?.replaceChildren(document.createTextNode('Could not open DietChat'));
         const retry = document.createElement('button');
         retry.type = 'button';
         retry.textContent = 'Try again';
